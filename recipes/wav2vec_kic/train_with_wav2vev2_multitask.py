@@ -13,7 +13,7 @@ import os
 import sys
 import speechbrain as sb
 from hyperpyyaml import load_hyperpyyaml
-
+import torch
 
 class EmoIdBrain(sb.Brain):
     def compute_forward(self, batch, stage):
@@ -30,25 +30,29 @@ class EmoIdBrain(sb.Brain):
         outputs = outputs.view(outputs.shape[0], -1)
 
         outputs_sp = self.modules.output_mlp_sp(outputs)
-        outputs_sp = self.hparams.log_softmax(outputs_sp)
+        #outputs_sp = self.hparams.log_softmax(outputs_sp)
         
         outputs_chn = self.modules.output_mlp_chn(outputs)
-        outputs_chn = self.hparams.log_softmax(outputs_chn)
+        #outputs_chn = self.hparams.log_softmax(outputs_chn)
     
         outputs_fan = self.modules.output_mlp_fan(outputs)
-        outputs_fan = self.hparams.log_softmax(outputs_fan)
+        #outputs_fan = self.hparams.log_softmax(outputs_fan)
     
         outputs_man = self.modules.output_mlp_man(outputs)
-        outputs_man = self.hparams.log_softmax(outputs_man)
+        #outputs_man = self.hparams.log_softmax(outputs_man)
 
         return outputs_sp, outputs_chn, outputs_fan, outputs_man
 
-    def compute_objectives(self, predictions_sp, predictions_chn, predictions_fan, predictions_man, batch, stage):
+    def compute_objectives(self, outputs_sp, outputs_chn, outputs_fan, outputs_man, batch, stage):
         """Computes the loss using speaker-id as label.
         """
         sp_true, chn_true, fan_true, man_true = batch.sp_true, batch.chn_true, batch.fan_true, batch.man_true
         """to meet the input form of nll loss"""
-        #emoid = emoid.squeeze(1)
+        predictions_sp = self.hparams.log_softmax(outputs_sp)
+        predictions_chn = self.hparams.log_softmax(outputs_chn)
+        predictions_fan = self.hparams.log_softmax(outputs_fan)
+        predictions_man = self.hparams.log_softmax(outputs_man)
+
         predictions_chn=predictions_chn[(chn_true!=-1).nonzero(as_tuple=True)]
         predictions_fan=predictions_fan[(fan_true!=-1).nonzero(as_tuple=True)]
         predictions_man=predictions_man[(man_true!=-1).nonzero(as_tuple=True)]
@@ -57,7 +61,7 @@ class EmoIdBrain(sb.Brain):
         fan_true=fan_true[(fan_true!=-1).nonzero(as_tuple=True)]
         man_true=man_true[(man_true!=-1).nonzero(as_tuple=True)]
         #print("lengths",len(sp_true),len(chn_true),len(fan_true),len(man_true))
-
+        
         loss = self.hparams.compute_cost(predictions_sp, sp_true)
         if len(chn_true)!=0:
             loss+=self.hparams.compute_cost(predictions_chn, chn_true)
@@ -65,6 +69,21 @@ class EmoIdBrain(sb.Brain):
             loss+=self.hparams.compute_cost(predictions_fan, fan_true)
         if len(man_true)!=0:    
             loss+=self.hparams.compute_cost(predictions_man, man_true)
+
+        if hasattr(self.hparams,"use_triplet_loss") and self.hparams.use_triplet_loss:
+            def get_triplet_pos_neg_idx(targets_sp_vec,target_idx):
+                anc_idx=((targets_sp_vec==target_idx)!=0).nonzero().flatten()
+                pos_idx,neg_idx=[],[]
+                if len(anc_idx)!=0:
+                    pos_idx=anc_idx[torch.randint(anc_idx.size()[0],(anc_idx.size()[0],))]
+                    neg_idx=((targets_sp_vec!=target_idx)!=0).nonzero().flatten()
+                    neg_idx=neg_idx[torch.randint(neg_idx.size()[0],(anc_idx.size()[0],))]
+                return anc_idx,pos_idx,neg_idx
+
+            anc_idx,pos_idx,neg_idx=get_triplet_pos_neg_idx(sp_true,self.hparams.triplet_anchor_idx)
+            if len(anc_idx)!=0:
+                loss+=torch.maximum(torch.tensor(0).cuda(),\
+                    self.hparams.triplet_loss_cost(outputs_sp[anc_idx,:],outputs_sp[pos_idx,:],outputs_sp[neg_idx,:])/len(anc_idx))
 
         if stage != sb.Stage.TRAIN:
             self.error_metrics.append(batch.id, predictions_sp, sp_true)
@@ -76,6 +95,7 @@ class EmoIdBrain(sb.Brain):
         """Trains the parameters given a single batch in input"""
         predictions_sp, predictions_chn, predictions_fan, predictions_man = self.compute_forward(batch, sb.Stage.TRAIN)
         loss = self.compute_objectives(predictions_sp, predictions_chn, predictions_fan, predictions_man, batch, sb.Stage.TRAIN)
+        
         loss.backward()
         if self.check_gradients(loss):
             self.wav2vec2_optimizer.step()
