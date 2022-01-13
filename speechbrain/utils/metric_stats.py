@@ -12,6 +12,8 @@ from speechbrain.utils.edit_distance import wer_summary, wer_details_for_batch
 from speechbrain.dataio.dataio import merge_char, split_word
 from speechbrain.dataio.wer import print_wer_summary, print_alignments
 
+from sklearn.metrics import confusion_matrix,f1_score,accuracy_score,cohen_kappa_score
+import numpy as np
 
 class MetricStats:
     """A default class for storing and summarizing arbitrary metrics.
@@ -113,6 +115,7 @@ class MetricStats:
             Returns a float if ``field`` is provided, otherwise
             returns a dictionary containing all computed stats.
         """
+        
         min_index = torch.argmin(torch.tensor(self.scores))
         max_index = torch.argmax(torch.tensor(self.scores))
         self.summary = {
@@ -416,6 +419,316 @@ class BinaryMetricStats(MetricStats):
         else:
             return self.summary
 
+
+class KICBinaryMetricStats(MetricStats):
+    """Tracks binary metrics, such as precision, recall, F1, EER, etc.
+    """
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.ids = []
+        self.preds = []
+        self.labels = []
+        # self.preds = {"sp":[],"chn":[],"fan":[],"man":[]}
+        # self.labels = {"sp":[],"chn":[],"fan":[],"man":[]}
+        self.summary = {}
+
+    def append(self, ids, preds, labels):
+        """Appends scores and labels to internal lists.
+
+        Does not compute metrics until time of summary, since
+        automatic thresholds (e.g., EER) need full set of scores.
+
+        Arguments
+        ---------
+        ids : list
+            The string ids for the samples
+        preds: dict
+            list of predicted output
+        labels: dict
+            list of labels
+        """
+        self.ids.extend(ids)
+        self.preds.extend(preds.detach())
+        self.labels.extend(labels.detach())
+
+    def summarize(self, field=None, eps=1e-8):
+        """Compute statistics using a full set of scores.
+
+        Full set of fields:
+         - accuracy 
+         - weighted F1 score
+         - macro F1 score
+         - kappa scores
+         - confusion matrices
+
+        Arguments
+        ---------
+        field : str
+            A key for selecting a single statistic. If not provided,
+            a dict with all statistics is returned.
+        threshold : float
+            If no threshold is provided, equal error rate is used.
+        beta : float
+            How much to weight precision vs recall in F-score. Default
+            of 1. is equal weight, while higher values weight recall
+            higher, and lower values weight precision higher.
+        eps : float
+            A small value to avoid dividing by zero.
+        """
+
+        if isinstance(self.preds, list):
+            self.preds = np.argmax(torch.stack(self.preds).cpu().numpy(),axis=1)
+            self.labels = torch.stack(self.labels).cpu().numpy()
+
+        self.summarize_helper(self.preds,self.labels,"")
+        unique_labels=np.unique(self.labels)
+        if len(unique_labels)>=6:
+            ytrue_merge,ypred_merge=self.labels,self.preds
+            ytrue_merge[ytrue_merge==5]=0
+            ypred_merge[ypred_merge==5]=0
+            self.summarize_helper(ypred_merge,ytrue_merge,"_merge")
+
+        if field is not None:
+            return self.summary[field]
+        else:
+            return self.summary
+    
+    def summarize_helper(self, preds, labels, merge, curr_type=""):
+        self.summary["accuracy{}{}".format(curr_type,merge)]=accuracy_score(labels,preds)
+        self.summary["weighted_f1{}{}".format(curr_type,merge)]=f1_score(labels,preds,average="weighted")
+        self.summary["macro_f1{}{}".format(curr_type,merge)]=f1_score(labels,preds,average="macro")
+        self.summary["kappa{}{}".format(curr_type,merge)]=cohen_kappa_score(labels,preds)
+
+        unique_labels=np.unique(labels)
+        for l in unique_labels:
+            curr_ytrue=np.where(labels==l,1,0)
+            curr_ypred=np.where(preds==l,1,0)
+            self.summary["kappa_{}{}{}".format(str(l),curr_type,merge)]=cohen_kappa_score(curr_ytrue,curr_ypred)
+
+        self.summary["confusion_matrix{}{}".format(curr_type,merge)]=confusion_matrix(labels,preds)
+
+    def write_stats(self, filestream, verbose=True):
+        """Write all relevant statistics to file.
+
+        Arguments
+        ---------
+        filestream : file-like object
+            A stream for the stats to be written to.
+        verbose : bool
+            Whether to also print the stats to stdout.
+        """
+        if not self.summary:
+            self.summarize()
+        
+        message = f"Accuracy: {self.summary['accuracy']}\n"
+        message += f"weighted f1 score: {self.summary['weighted_f1']}\n"
+        message += f"macro f1 score: {self.summary['macro_f1']}\n"
+        message += f"kappa: {self.summary['kappa']}\n"
+        message += f"kappa_SIL: {self.summary['kappa_0']}\n"
+        message += f"kappa_CHN: {self.summary['kappa_1']}\n"
+        message += f"kappa_FAN: {self.summary['kappa_2']}\n"
+        message += f"kappa_MAN: {self.summary['kappa_3']}\n"
+        message += f"kappa_CXN: {self.summary['kappa_4']}\n"
+        try:
+            message += f"kappa_NOI: {self.summary['kappa_5']}\n"
+        except:
+            pass
+        message += f"Confusion matrix:\n"
+        message += f"SIL CHN  FAN  MAN  CXN  NOI \n"
+        message += f"{self.summary['confusion_matrix']}\n"
+        if "kappa_merge" in self.summary.keys():
+            message += f"Merge NOI and SIL into one category\n"
+            message += f"Accuracy: {self.summary['accuracy_merge']}\n"
+            message += f"weighted f1 score: {self.summary['weighted_f1_merge']}\n"
+            message += f"macro f1 score: {self.summary['macro_f1_merge']}\n"
+            message += f"kappa: {self.summary['kappa_merge']}\n"
+            message += f"kappa_SIL: {self.summary['kappa_0_merge']}\n"
+            message += f"kappa_CHN: {self.summary['kappa_1_merge']}\n"
+            message += f"kappa_FAN: {self.summary['kappa_2_merge']}\n"
+            message += f"kappa_MAN: {self.summary['kappa_3_merge']}\n"
+            message += f"kappa_CXN: {self.summary['kappa_4_merge']}\n"
+            message += f"Confusion matrix:\n"
+            message += f"SIL CHN  FAN  MAN  CXN \n"
+            message += f"{self.summary['confusion_matrix_merge']}\n"
+        
+        filestream.write(message)
+        if verbose:
+            print(message)
+
+
+class KICMultitaskBinaryMetricStats(MetricStats):
+    """Tracks binary metrics, such as precision, recall, F1, EER, etc.
+    """
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.ids = []
+        self.preds = {"sp":[],"chn":[],"fan":[],"man":[]}
+        self.labels = {"sp":[],"chn":[],"fan":[],"man":[]}
+        self.summary = {}
+
+    def append(self, ids, preds, labels):
+        """Appends scores and labels to internal lists.
+
+        Does not compute metrics until time of summary, since
+        automatic thresholds (e.g., EER) need full set of scores.
+
+        Arguments
+        ---------
+        ids : list
+            The string ids for the samples
+        preds: dict
+            list of predicted output
+        labels: dict
+            list of labels
+        """
+        self.ids.extend(ids)
+        self.preds["sp"].extend(preds[0].detach())
+        self.preds["chn"].extend(preds[1].detach())
+        self.preds["fan"].extend(preds[2].detach())
+        self.preds["man"].extend(preds[3].detach())
+
+        self.labels["sp"].extend(labels[0].detach())
+        self.labels["chn"].extend(labels[1].detach())
+        self.labels["fan"].extend(labels[2].detach())
+        self.labels["man"].extend(labels[3].detach())
+
+    def summarize(self, field=None, eps=1e-8):
+        """Compute statistics using a full set of scores.
+
+        Full set of fields:
+         - accuracy 
+         - weighted F1 score
+         - macro F1 score
+         - kappa scores
+         - confusion matrices
+
+        Arguments
+        ---------
+        field : str
+            A key for selecting a single statistic. If not provided,
+            a dict with all statistics is returned.
+        threshold : float
+            If no threshold is provided, equal error rate is used.
+        beta : float
+            How much to weight precision vs recall in F-score. Default
+            of 1. is equal weight, while higher values weight recall
+            higher, and lower values weight precision higher.
+        eps : float
+            A small value to avoid dividing by zero.
+        """
+
+        for tier in ["sp","chn","fan","man"]:
+            self.curr_preds = np.argmax(torch.stack(self.preds[tier]).cpu().numpy(),axis=1)
+            self.curr_labels = torch.stack(self.labels[tier]).cpu().numpy()
+            
+            self.summarize_helper(self.curr_preds,self.curr_labels,"",tier)
+            if tier=="sp" and len(np.unique(self.curr_labels))>=6:
+                ytrue_merge,ypred_merge=self.curr_labels,self.curr_preds
+                ytrue_merge[ytrue_merge==5]=0
+                ypred_merge[ypred_merge==5]=0
+                self.summarize_helper(ypred_merge,ytrue_merge,"_merge","sp")
+
+        if field is not None:
+            return self.summary[field]
+        else:
+            return self.summary
+    
+    def summarize_helper(self, preds, labels, merge="", curr_type=""):
+        self.summary["accuracy{}{}".format(curr_type,merge)]=accuracy_score(labels,preds)
+        self.summary["weighted_f1{}{}".format(curr_type,merge)]=f1_score(labels,preds,average="weighted")
+        self.summary["macro_f1{}{}".format(curr_type,merge)]=f1_score(labels,preds,average="macro")
+        self.summary["kappa{}{}".format(curr_type,merge)]=cohen_kappa_score(labels,preds)
+
+        unique_labels=np.unique(labels)
+        for l in unique_labels:
+            curr_ytrue=np.where(labels==l,1,0)
+            curr_ypred=np.where(preds==l,1,0)
+            self.summary["kappa_{}{}{}".format(str(l),curr_type,merge)]=cohen_kappa_score(curr_ytrue,curr_ypred)
+
+        self.summary["confusion_matrix{}{}".format(curr_type,merge)]=confusion_matrix(labels,preds)
+
+    def write_stats(self, filestream, verbose=True):
+        """Write all relevant statistics to file.
+
+        Arguments
+        ---------
+        filestream : file-like object
+            A stream for the stats to be written to.
+        verbose : bool
+            Whether to also print the stats to stdout.
+        """
+        if not self.summary:
+            self.summarize()
+        
+        message= f"Speaker Diarization\n"
+        for tier in ["sp","chn","fan","man"]:
+            message += f"Accuracy: {self.summary['accuracy{}'.format(tier)]}\n"
+            message += f"weighted f1 score: {self.summary['weighted_f1{}'.format(tier)]}\n"
+            message += f"macro f1 score: {self.summary['macro_f1{}'.format(tier)]}\n"
+            message += f"kappa: {self.summary['kappa{}'.format(tier)]}\n"
+            if tier=="sp":
+                message += f"kappa_SIL: {self.summary['kappa_0{}'.format(tier)]}\n"
+                message += f"kappa_CHN: {self.summary['kappa_1{}'.format(tier)]}\n"
+                message += f"kappa_FAN: {self.summary['kappa_2{}'.format(tier)]}\n"
+                message += f"kappa_MAN: {self.summary['kappa_3{}'.format(tier)]}\n"
+                message += f"kappa_CXN: {self.summary['kappa_4{}'.format(tier)]}\n"
+                try:
+                    message += f"kappa_NOI: {self.summary['kappa_5{}'.format(tier)]}\n"
+                except:
+                    pass
+            if tier=="chn":
+                message += f"kappa_CRY: {self.summary['kappa_0{}'.format(tier)]}\n"
+                message += f"kappa_FUS: {self.summary['kappa_1{}'.format(tier)]}\n"
+                message += f"kappa_BAB: {self.summary['kappa_2{}'.format(tier)]}\n"
+
+            if tier=="fan" :
+                message += f"kappa_CDS: {self.summary['kappa_0{}'.format(tier)]}\n"
+                message += f"kappa_FAN: {self.summary['kappa_1{}'.format(tier)]}\n"
+                message += f"kappa_LAU: {self.summary['kappa_2{}'.format(tier)]}\n"
+                message += f"kappa_SNG: {self.summary['kappa_3{}'.format(tier)]}\n"
+
+            if tier=="man" :
+                message += f"kappa_CDS: {self.summary['kappa_0{}'.format(tier)]}\n"
+                message += f"kappa_MAN: {self.summary['kappa_1{}'.format(tier)]}\n"
+                message += f"kappa_LAU: {self.summary['kappa_2{}'.format(tier)]}\n"
+                message += f"kappa_SNG: {self.summary['kappa_3{}'.format(tier)]}\n"
+
+            message += f"Confusion matrix:\n"
+            if tier == "sp":
+                message += f"SIL CHN  FAN  MAN  CXN  NOI \n"
+            if tier =="chn":
+                message += f"CRY FUS BAB \n"
+            if tier =="fan":
+                message += f"CDS  FAN  LAU  SNG \n"
+            if tier =="man":
+                message += f"CDS  MAN  LAU  SNG \n"
+
+            message += f"{self.summary['confusion_matrix{}'.format(tier)]}\n"
+
+            if tier=="sp" and "kappasp_merge" in self.summary.keys():
+                message += f"Merge NOI and SIL into one category\n"
+                message += f"Accuracy: {self.summary['accuracy{}_merge'.format(tier)]}\n"
+                message += f"weighted f1 score: {self.summary['weighted_f1{}_merge'.format(tier)]}\n"
+                message += f"macro f1 score: {self.summary['macro_f1{}_merge'.format(tier)]}\n"
+                message += f"kappa: {self.summary['kappa{}_merge'.format(tier)]}\n"
+                message += f"kappa_SIL: {self.summary['kappa_0{}_merge'.format(tier)]}\n"
+                message += f"kappa_CHN: {self.summary['kappa_1{}_merge'.format(tier)]}\n"
+                message += f"kappa_FAN: {self.summary['kappa_2{}_merge'.format(tier)]}\n"
+                message += f"kappa_MAN: {self.summary['kappa_3{}_merge'.format(tier)]}\n"
+                message += f"kappa_CXN: {self.summary['kappa_4{}_merge'.format(tier)]}\n"
+                message += f"Confusion matrix:\n"
+                message += f"SIL CHN  FAN  MAN  CXN \n"
+                message += f"{self.summary['confusion_matrix{}_merge'.format(tier)]}\n"
+        
+        filestream.write(message)
+        if verbose:
+            print(message)
 
 def EER(positive_scores, negative_scores):
     """Computes the EER (and its threshold).
