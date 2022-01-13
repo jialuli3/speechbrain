@@ -324,7 +324,6 @@ def l1_loss(
         loss, predictions, targets, length, reduction=reduction
     )
 
-
 def mse_loss(
     predictions, targets, length=None, allowed_len_diff=3, reduction="mean"
 ):
@@ -356,6 +355,51 @@ def mse_loss(
     return compute_masked_loss(
         loss, predictions, targets, length, reduction=reduction
     )
+
+def triplet_margin_loss(
+    anchor, positive, negative, margin=1.0, p=2, eps=1e-6, swap=False, reduction="mean"
+):
+    """Compute the triplet margin loss. (copied over pytorch document)
+    https://pytorch.org/docs/stable/_modules/torch/nn/modules/loss.html#TripletMarginLoss
+    
+    tensors :math:`x1`, :math:`x2`, :math:`x3` and a margin with a value greater than :math:`0`.
+    This is used for measuring a relative similarity between samples. A triplet
+    is composed by `a`, `p` and `n` (i.e., `anchor`, `positive examples` and `negative
+    examples` respectively). The shapes of all input tensors should be
+    :math:`(N, D)`.
+
+    The distance swap is described in detail in the paper `Learning shallow
+    convolutional feature descriptors with triplet losses`_ by
+    V. Balntas, E. Riba et al.
+
+    The loss function for each sample in the mini-batch is:
+
+    .. math::
+        L(a, p, n) = \max \{d(a_i, p_i) - d(a_i, n_i) + {\rm margin}, 0\}
+    where
+
+    .. math::
+        d(x_i, y_i) = \left\lVert {\bf x}_i - {\bf y}_i \right\rVert_p
+
+    Arguments
+    ---------
+        reduction : str
+        Options are 'mean', 'batch', 'batchmean', 'sum'.
+        See pytorch for 'mean', 'sum'. The 'batch' option returns
+        one loss per item in the batch, 'batchmean' returns sum / batch size.
+
+    Example
+    -------
+    >>> triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
+    >>> anchor = torch.randn(100, 128, requires_grad=True)
+    >>> positive = torch.randn(100, 128, requires_grad=True)
+    >>> negative = torch.randn(100, 128, requires_grad=True)
+    >>> output = triplet_loss(anchor, positive, negative)
+    >>> output.backward()
+    """
+    loss = torch.nn.functional.triplet_margin_loss(anchor,positive,negative,margin=margin,
+            p=p,eps=eps,swap=swap,reduction=reduction)
+    return loss
 
 
 def classification_error(
