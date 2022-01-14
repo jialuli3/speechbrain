@@ -60,7 +60,6 @@ class EmoIdBrain(sb.Brain):
         chn_true=chn_true[(chn_true!=-1).nonzero(as_tuple=True)]
         fan_true=fan_true[(fan_true!=-1).nonzero(as_tuple=True)]
         man_true=man_true[(man_true!=-1).nonzero(as_tuple=True)]
-        #print("lengths",len(sp_true),len(chn_true),len(fan_true),len(man_true))
         
         loss = self.hparams.compute_cost(predictions_sp, sp_true)
         if len(chn_true)!=0:
@@ -84,9 +83,9 @@ class EmoIdBrain(sb.Brain):
             if len(anc_idx)!=0:
                 loss+=torch.maximum(torch.tensor(0).cuda(),\
                     self.hparams.triplet_loss_cost(outputs_sp[anc_idx,:],outputs_sp[pos_idx,:],outputs_sp[neg_idx,:])/len(anc_idx))
-
+        
         if stage != sb.Stage.TRAIN:
-            self.error_metrics.append(batch.id, predictions_sp, sp_true)
+            #self.error_metrics.append(batch.id, predictions_sp, sp_true)
             self.error_metrics_kic.append(batch.id,[predictions_sp, predictions_chn, predictions_fan, predictions_man],\
                 [sp_true, chn_true, fan_true, man_true])
         return loss
@@ -128,7 +127,7 @@ class EmoIdBrain(sb.Brain):
 
         # Set up evaluation-only statistics trackers
         if stage != sb.Stage.TRAIN:
-            self.error_metrics = self.hparams.error_stats()
+            #self.error_metrics = self.hparams.error_stats()
             self.error_metrics_kic = self.hparams.error_stats_kic()
 
     def on_stage_end(self, stage, stage_loss, epoch=None):
@@ -152,10 +151,10 @@ class EmoIdBrain(sb.Brain):
         else:
             stats = {
                 "loss": stage_loss,
-                "error_rate": self.error_metrics.summarize("average"),
+                #"error_rate": self.error_metrics.summarize("average"),
                 #"error_rate_kic": self.error_metrics_kic.summarize(),
                 "error_rate_kappa": 1-(0.5*self.error_metrics_kic.summarize("kappasp")+
-                0.3*self.error_metrics_kic.summarize("kappachn")+0.2*self.error_metrics_kic.summarize("kappafan")+
+                0.3*self.error_metrics_kic.summarize("kappachn")+0.1*self.error_metrics_kic.summarize("kappafan")+
                 0.1*self.error_metrics_kic.summarize("kappaman"))
             }
 
