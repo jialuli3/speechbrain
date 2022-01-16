@@ -29,6 +29,25 @@ class EmoIdBrain(sb.Brain):
         outputs = self.hparams.avg_pool(outputs, lens)
         outputs = outputs.view(outputs.shape[0], -1)
 
+        # load os value
+        os_value, os_lens = batch.os_value
+        
+        os_outputs1 = self.modules.conv_layer1(os_value.unsqueeze(1)).squeeze()
+        os_outputs2 = self.modules.conv_layer2(os_value.unsqueeze(1)).squeeze()
+        os_outputs3 = self.modules.conv_layer3(os_value.unsqueeze(1)).squeeze()
+
+        os_outputs1 = self.hparams.max_pool(os_outputs1)
+        os_outputs2 = self.hparams.max_pool(os_outputs2)
+        os_outputs3 = self.hparams.max_pool(os_outputs3)
+
+        os_outputs = torch.cat((os_outputs1,os_outputs2,os_outputs3), dim=1)
+        os_outputs = self.hparams.drop_out(os_outputs)
+        os_outputs = self.modules.att(os_outputs)
+        os_outputs = self.hparams.adaptive_pool(os_outputs).squeeze()
+
+        outputs = torch.cat((outputs,os_outputs),1)
+        outputs = torch.nn.functional.relu(self.modules.output_mlp_inter(outputs))
+
         outputs_sp = self.modules.output_mlp_sp(outputs)
         outputs_chn = self.modules.output_mlp_chn(outputs)
         outputs_fan = self.modules.output_mlp_fan(outputs)    
@@ -234,13 +253,16 @@ def dataio_prep(hparams):
         return sig
 
     # Define opensmile pipeline
-    # @sb.utils.data_pipeline.takes("os")
-    # @sb.utils.data_pipeline.provides("os_value")
-    # def os_pipeline(os_file):
-    #     """Load the signal, and pass it and its length to the corruption class.
-    #     This is done on the CPU in the `collate_fn`."""
-    #     os_value = sb.dataio.dataio.load_pickle(os_file)
-    #     return os_value
+    @sb.utils.data_pipeline.takes("os")
+    @sb.utils.data_pipeline.provides("os_value")
+    def os_pipeline(os_file):
+        """Load the signal, and pass it and its length to the corruption class.
+        This is done on the CPU in the `collate_fn`."""
+        os_value = sb.dataio.dataio.load_pickle(os_file)
+        os_value = sb.dataio.dataio.to_floatTensor(os_value)
+        os_value, _ = sb.utils.data_utils.pad_right_to(os_value,(1600,))
+        os_value.resize_(40,40)
+        return os_value
 
     # Define label pipeline:
     @sb.utils.data_pipeline.takes("sp", "chn", "fan", "man")
@@ -276,10 +298,10 @@ def dataio_prep(hparams):
     for dataset in ["train", "valid", "test"]:
         datasets[dataset] = sb.dataio.dataset.DynamicItemDataset.from_json(
             json_path=hparams[f"{dataset}_annotation"],
-            replacements={"data_root": hparams["data_folder"]},
-            dynamic_items=[audio_pipeline, label_pipeline_sp, label_pipeline_chn, label_pipeline_fan, label_pipeline_man],
-            output_keys=["id", "sig", "sp_true", "chn_true", "fan_true", "man_true"],
-        )
+            replacements={"data_root": hparams["data_folder"],"os_data_root":hparams["os_data_folder"]},
+            dynamic_items=[audio_pipeline, os_pipeline, label_pipeline_sp, label_pipeline_chn, label_pipeline_fan, label_pipeline_man],
+            output_keys=["id", "sig", "os_value", "sp_true", "chn_true", "fan_true", "man_true"],
+            )
 
     return datasets
 

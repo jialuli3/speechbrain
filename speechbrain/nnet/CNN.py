@@ -530,6 +530,7 @@ class Conv2d(nn.Module):
         groups=1,
         bias=True,
         padding_mode="reflect",
+        skip_transpose=False,
     ):
         super().__init__()
 
@@ -547,6 +548,7 @@ class Conv2d(nn.Module):
         self.padding = padding
         self.padding_mode = padding_mode
         self.unsqueeze = False
+        self.skip_transpose = skip_transpose
 
         if input_shape is None and in_channels is None:
             raise ValueError("Must provide one of input_shape or in_channels")
@@ -575,7 +577,9 @@ class Conv2d(nn.Module):
             input to convolve. 2d or 4d tensors are expected.
 
         """
-        x = x.transpose(1, -1)
+        if not self.skip_transpose:
+            x = x.transpose(1, -1)
+        
         if self.unsqueeze:
             x = x.unsqueeze(1)
 
