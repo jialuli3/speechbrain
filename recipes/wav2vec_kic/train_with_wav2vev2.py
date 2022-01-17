@@ -13,126 +13,44 @@ import os
 import sys
 import speechbrain as sb
 from hyperpyyaml import load_hyperpyyaml
-import torch
+
 
 class EmoIdBrain(sb.Brain):
     def compute_forward(self, batch, stage):
         """Computation pipeline based on a encoder + emotion classifier.
         """
-        
         batch = batch.to(self.device)
         wavs, lens = batch.sig
-
+        
         outputs = self.modules.wav2vec2(wavs)
 
         # last dim will be used for AdaptativeAVG pool
         outputs = self.hparams.avg_pool(outputs, lens)
         outputs = outputs.view(outputs.shape[0], -1)
 
-        # load os value
-        os_value, os_lens = batch.os_value
-
-        outputs = self.compute_outputs2(os_value,outputs)
-
-        
-        outputs_sp = self.modules.output_mlp_sp(outputs)
-        outputs_chn = self.modules.output_mlp_chn(outputs)
-        outputs_fan = self.modules.output_mlp_fan(outputs)    
-        outputs_man = self.modules.output_mlp_man(outputs)
-
-        return outputs_sp, outputs_chn, outputs_fan, outputs_man
-
-    def compute_outputs1(self,os_value, w2v2_outputs):
-        os_outputs1 = self.modules.conv_layer1(os_value.unsqueeze(1)).squeeze()
-        os_outputs2 = self.modules.conv_layer2(os_value.unsqueeze(1)).squeeze()
-        os_outputs3 = self.modules.conv_layer3(os_value.unsqueeze(1)).squeeze()
-
-        os_outputs1 = self.hparams.max_pool(os_outputs1)
-        os_outputs2 = self.hparams.max_pool(os_outputs2)
-        os_outputs3 = self.hparams.max_pool(os_outputs3)
-
-        os_outputs = torch.cat((os_outputs1,os_outputs2,os_outputs3), dim=1)
-        os_outputs = self.hparams.drop_out(os_outputs)
-        os_outputs = self.modules.att(os_outputs)
-        os_outputs = self.hparams.adaptive_pool(os_outputs).squeeze()
-        os_outputs = self.hparams.os_weight*os_outputs
-
-        outputs = torch.cat((w2v2_outputs,os_outputs),1)
-        outputs = torch.nn.functional.relu(self.modules.output_mlp_inter(outputs))
-
+        outputs = self.modules.output_mlp(outputs)
+        outputs = self.hparams.log_softmax(outputs)
         return outputs
 
-    def compute_outputs2(self,os_value,w2v2_outputs):
-        os_outputs1 = self.modules.conv_layer1(os_value.unsqueeze(1)).squeeze()
-        os_outputs2 = self.modules.conv_layer2(os_value.unsqueeze(1)).squeeze()
-        os_outputs3 = self.modules.conv_layer3(os_value.unsqueeze(1)).squeeze()
-
-        os_outputs1 = self.hparams.max_pool(os_outputs1)
-        os_outputs2 = self.hparams.max_pool(os_outputs2)
-        os_outputs3 = self.hparams.max_pool(os_outputs3)
-
-        os_outputs = torch.cat((os_outputs1,os_outputs2,os_outputs3), dim=1)
-        os_outputs = self.hparams.drop_out(os_outputs)
-        os_outputs = self.hparams.avg_pool(os_outputs).squeeze()
-        
-        outputs = torch.cat((w2v2_outputs,os_outputs),1)
-        # could add attention here
-        outputs = torch.nn.functional.relu(self.modules.output_mlp_inter(outputs))        
-        return outputs
-
-
-    def compute_objectives(self, outputs_sp, outputs_chn, outputs_fan, outputs_man, batch, stage):
+    def compute_objectives(self, predictions, batch, stage):
         """Computes the loss using speaker-id as label.
         """
-        sp_true, chn_true, fan_true, man_true = batch.sp_true, batch.chn_true, batch.fan_true, batch.man_true
+        # print(batch.emo_encoded)
+        #emoid, _ = batch.emo_encoded
+        emoid = batch.sp_true
         """to meet the input form of nll loss"""
-        predictions_sp = self.hparams.log_softmax(outputs_sp)
-        predictions_chn = self.hparams.log_softmax(outputs_chn)
-        predictions_fan = self.hparams.log_softmax(outputs_fan)
-        predictions_man = self.hparams.log_softmax(outputs_man)
-
-        predictions_chn=predictions_chn[(chn_true!=-1).nonzero(as_tuple=True)]
-        predictions_fan=predictions_fan[(fan_true!=-1).nonzero(as_tuple=True)]
-        predictions_man=predictions_man[(man_true!=-1).nonzero(as_tuple=True)]
-
-        chn_true=chn_true[(chn_true!=-1).nonzero(as_tuple=True)]
-        fan_true=fan_true[(fan_true!=-1).nonzero(as_tuple=True)]
-        man_true=man_true[(man_true!=-1).nonzero(as_tuple=True)]
-
-        loss = getattr(self.hparams,"sp_weights", 1) * self.hparams.compute_cost(predictions_sp, sp_true)
-        if len(chn_true)!=0:
-            loss+=getattr(self.hparams,"chn_weights", 1) * self.hparams.compute_cost(predictions_chn, chn_true)
-        if len(fan_true)!=0:
-            loss+=getattr(self.hparams,"fan_weights", 1) * self.hparams.compute_cost(predictions_fan, fan_true)
-        if len(man_true)!=0:    
-            loss+=getattr(self.hparams,"man_weights", 1) * self.hparams.compute_cost(predictions_man, man_true)
-
-        if hasattr(self.hparams,"use_triplet_loss") and self.hparams.use_triplet_loss:
-            def get_triplet_pos_neg_idx(targets_sp_vec,target_idx):
-                anc_idx=((targets_sp_vec==target_idx)!=0).nonzero().flatten()
-                pos_idx,neg_idx=[],[]
-                if len(anc_idx)!=0:
-                    pos_idx=anc_idx[torch.randint(anc_idx.size()[0],(anc_idx.size()[0],))]
-                    neg_idx=((targets_sp_vec!=target_idx)!=0).nonzero().flatten()
-                    neg_idx=neg_idx[torch.randint(neg_idx.size()[0],(anc_idx.size()[0],))]
-                return anc_idx,pos_idx,neg_idx
-
-            anc_idx,pos_idx,neg_idx=get_triplet_pos_neg_idx(sp_true,self.hparams.triplet_anchor_idx)
-            if len(anc_idx)!=0:
-                loss+=torch.maximum(torch.tensor(0).cuda(),\
-                    self.hparams.triplet_loss_cost(outputs_sp[anc_idx,:],outputs_sp[pos_idx,:],outputs_sp[neg_idx,:])/len(anc_idx))
-        
+        #emoid = emoid.squeeze(1)
+        loss = self.hparams.compute_cost(predictions, emoid)
         if stage != sb.Stage.TRAIN:
-            #self.error_metrics.append(batch.id, predictions_sp, sp_true)
-            self.error_metrics_kic.append(batch.id,[predictions_sp, predictions_chn, predictions_fan, predictions_man],\
-                [sp_true, chn_true, fan_true, man_true])
+            self.error_metrics.append(batch.id, predictions, emoid)
+            self.error_metrics_kic.append(batch.id,predictions,emoid)
         return loss
 
     def fit_batch(self, batch):
         """Trains the parameters given a single batch in input"""
-        predictions_sp, predictions_chn, predictions_fan, predictions_man = self.compute_forward(batch, sb.Stage.TRAIN)
-        loss = self.compute_objectives(predictions_sp, predictions_chn, predictions_fan, predictions_man, batch, sb.Stage.TRAIN)
-        
+
+        predictions = self.compute_forward(batch, sb.Stage.TRAIN)
+        loss = self.compute_objectives(predictions, batch, sb.Stage.TRAIN)
         loss.backward()
         if self.check_gradients(loss):
             self.wav2vec2_optimizer.step()
@@ -142,11 +60,6 @@ class EmoIdBrain(sb.Brain):
         self.optimizer.zero_grad()
 
         return loss.detach()
-
-    def evaluate_batch(self,batch,stage):
-        predictions_sp, predictions_chn, predictions_fan, predictions_man = self.compute_forward(batch, stage)
-        loss = self.compute_objectives(predictions_sp, predictions_chn, predictions_fan, predictions_man, batch, stage)
-        return loss.detach().cpu()
 
     def on_stage_start(self, stage, epoch=None):
         """Gets called at the beginning of each epoch.
@@ -158,6 +71,7 @@ class EmoIdBrain(sb.Brain):
             The currently-starting epoch. This is passed
             `None` during the test stage.
         """
+
         # Set up statistics trackers for this stage
         self.loss_metric = sb.utils.metric_stats.MetricStats(
             metric=sb.nnet.losses.nll_loss
@@ -165,7 +79,7 @@ class EmoIdBrain(sb.Brain):
 
         # Set up evaluation-only statistics trackers
         if stage != sb.Stage.TRAIN:
-            #self.error_metrics = self.hparams.error_stats()
+            self.error_metrics = self.hparams.error_stats()
             self.error_metrics_kic = self.hparams.error_stats_kic()
 
     def on_stage_end(self, stage, stage_loss, epoch=None):
@@ -189,11 +103,9 @@ class EmoIdBrain(sb.Brain):
         else:
             stats = {
                 "loss": stage_loss,
-                #"error_rate": self.error_metrics.summarize("average"),
+                "error_rate": self.error_metrics.summarize("average"),
                 #"error_rate_kic": self.error_metrics_kic.summarize(),
-                "error_rate_kappa": 1-(0.5*self.error_metrics_kic.summarize("kappasp")+
-                0.3*self.error_metrics_kic.summarize("kappachn")+0.1*self.error_metrics_kic.summarize("kappafan")+
-                0.1*self.error_metrics_kic.summarize("kappaman"))
+                "error_rate_kappa": 1-self.error_metrics_kic.summarize("kappa")
             }
 
         # At the end of validation...
@@ -216,24 +128,21 @@ class EmoIdBrain(sb.Brain):
                 train_stats={"loss": self.train_loss},
                 valid_stats=stats,
             )
+            with open(self.hparams.train_log, "a") as w:
+                self.error_metrics_kic.write_stats(w)
 
             # Save the current checkpoint and delete previous checkpoints,
             self.checkpointer.save_and_keep_only(
-                meta=stats, 
-                min_keys=["error_rate_kappa"]
+                meta=stats, min_keys=["error_rate_kappa"]
             )
 
-            with open(self.hparams.train_log, "a") as w:
-                self.error_metrics_kic.write_stats(w)
         # We also write statistics about test data to stdout and to logfile.
         if stage == sb.Stage.TEST:
             self.hparams.train_logger.log_stats(
                 {"Epoch loaded": self.hparams.epoch_counter.current},
                 test_stats=stats,
             )
-            with open(self.hparams.train_log, "a") as w:
-                self.error_metrics_kic.write_stats(w)
-
+ 
             with open(self.hparams.output_log, "w") as w:
                 self.error_metrics_kic.write_stats(w)
                 
@@ -278,56 +187,36 @@ def dataio_prep(hparams):
         sig = sb.dataio.dataio.read_audio(wav)
         return sig
 
-    # Define opensmile pipeline
-    @sb.utils.data_pipeline.takes("os")
-    @sb.utils.data_pipeline.provides("os_value")
-    def os_pipeline(os_file):
-        """Load the signal, and pass it and its length to the corruption class.
-        This is done on the CPU in the `collate_fn`."""
-        os_value = sb.dataio.dataio.load_pickle(os_file)
-        os_value = sb.dataio.dataio.to_floatTensor(os_value)
-        os_value, _ = sb.utils.data_utils.pad_right_to(os_value,(1600,))
-        os_value.resize_(40,40)
-        return os_value
+    # Initialization of the label encoder. The label encoder assignes to each
+    # of the observed label a unique index (e.g, 'spk01': 0, 'spk02': 1, ..)
+    label_encoder = sb.dataio.encoder.CategoricalEncoder()
 
     # Define label pipeline:
-    @sb.utils.data_pipeline.takes("sp", "chn", "fan", "man")
-    @sb.utils.data_pipeline.provides("sp_true", "chn_true", "fan_true", "man_true")
-    def label_pipeline(sp, chn, fan, man):
-        yield sp, chn, fan, man
-        sp_true, chn_true, fan_true, man_true = int(sp), int(chn)-1, int(fan)-1, int(man)-1
-        yield sp_true, chn_true, fan_true, man_true
-
     @sb.utils.data_pipeline.takes("sp")
     @sb.utils.data_pipeline.provides("sp_true")
-    def label_pipeline_sp(input):
+    def label_pipeline(input):
         yield int(input)
 
-    #chn, fan, and man default value as 0 for silence
-    @sb.utils.data_pipeline.takes("chn")
-    @sb.utils.data_pipeline.provides("chn_true")
-    def label_pipeline_chn(input):
-        yield int(input)-1
-
-    @sb.utils.data_pipeline.takes("fan")
-    @sb.utils.data_pipeline.provides("fan_true")
-    def label_pipeline_fan(input):
-        yield int(input)-1
-
-    @sb.utils.data_pipeline.takes("man")
-    @sb.utils.data_pipeline.provides("man_true")
-    def label_pipeline_man(input):
-        yield int(input)-1
     # Define datasets. We also connect the dataset with the data processing
     # functions defined above.
     datasets = {}
     for dataset in ["train", "valid", "test"]:
         datasets[dataset] = sb.dataio.dataset.DynamicItemDataset.from_json(
             json_path=hparams[f"{dataset}_annotation"],
-            replacements={"data_root": hparams["data_folder"],"os_data_root":hparams["os_data_folder"]},
-            dynamic_items=[audio_pipeline, os_pipeline, label_pipeline_sp, label_pipeline_chn, label_pipeline_fan, label_pipeline_man],
-            output_keys=["id", "sig", "os_value", "sp_true", "chn_true", "fan_true", "man_true"],
-            )
+            replacements={"data_root": hparams["data_folder"]},
+            dynamic_items=[audio_pipeline, label_pipeline],
+            output_keys=["id", "sig", "sp_true"],
+        )
+    # Load or compute the label encoder (with multi-GPU DDP support)
+    # Please, take a look into the lab_enc_file to see the label to index
+    # mappinng.
+
+    # lab_enc_file = os.path.join(hparams["save_folder"], "label_encoder.txt")
+    # label_encoder.load_or_create(
+    #     path=lab_enc_file,
+    #     from_didatasets=[datasets["train"]],
+    #     output_key="emo",
+    # )
 
     return datasets
 
