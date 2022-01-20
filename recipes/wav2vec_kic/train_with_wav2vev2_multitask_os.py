@@ -32,27 +32,26 @@ class EmoIdBrain(sb.Brain):
         # load os value
         os_value, os_lens = batch.os_value
 
-        outputs = self.compute_outputs2(os_value,outputs)
-
-        
-        outputs_sp = self.modules.output_mlp_sp(outputs)
-        outputs_chn = self.modules.output_mlp_chn(outputs)
-        outputs_fan = self.modules.output_mlp_fan(outputs)    
-        outputs_man = self.modules.output_mlp_man(outputs)
+        outputs_sp, outputs_chn, outputs_fan, outputs_man = self.compute_outputs2(os_value,outputs)
 
         return outputs_sp, outputs_chn, outputs_fan, outputs_man
 
-    def compute_outputs1(self,os_value, w2v2_outputs):
+    def compute_cnn_outputs(self,os_value):
         os_outputs1 = self.modules.conv_layer1(os_value.unsqueeze(1)).squeeze()
         os_outputs2 = self.modules.conv_layer2(os_value.unsqueeze(1)).squeeze()
         os_outputs3 = self.modules.conv_layer3(os_value.unsqueeze(1)).squeeze()
+        os_outputs4 = self.modules.conv_layer4(os_value.unsqueeze(1)).squeeze(1)
 
         os_outputs1 = self.hparams.max_pool(os_outputs1)
         os_outputs2 = self.hparams.max_pool(os_outputs2)
         os_outputs3 = self.hparams.max_pool(os_outputs3)
 
-        os_outputs = torch.cat((os_outputs1,os_outputs2,os_outputs3), dim=1)
+        os_outputs = torch.cat((os_outputs1,os_outputs2,os_outputs3,os_outputs4), dim=1)
         os_outputs = self.hparams.drop_out(os_outputs)
+        return os_outputs
+
+    def compute_outputs1(self,os_value, w2v2_outputs):
+        os_outputs = self.compute_cnn_outputs(os_value)
         os_outputs = self.modules.att(os_outputs)
         os_outputs = self.hparams.adaptive_pool(os_outputs).squeeze()
         os_outputs = self.hparams.os_weight*os_outputs
@@ -60,25 +59,46 @@ class EmoIdBrain(sb.Brain):
         outputs = torch.cat((w2v2_outputs,os_outputs),1)
         outputs = torch.nn.functional.relu(self.modules.output_mlp_inter(outputs))
 
-        return outputs
+        outputs_sp = self.modules.output_mlp_sp(outputs)
+        outputs_chn = self.modules.output_mlp_chn(outputs)
+        outputs_fan = self.modules.output_mlp_fan(outputs)    
+        outputs_man = self.modules.output_mlp_man(outputs)
+
+        return outputs_sp, outputs_chn, outputs_fan, outputs_man
 
     def compute_outputs2(self,os_value,w2v2_outputs):
-        os_outputs1 = self.modules.conv_layer1(os_value.unsqueeze(1)).squeeze()
-        os_outputs2 = self.modules.conv_layer2(os_value.unsqueeze(1)).squeeze()
-        os_outputs3 = self.modules.conv_layer3(os_value.unsqueeze(1)).squeeze()
-
-        os_outputs1 = self.hparams.max_pool(os_outputs1)
-        os_outputs2 = self.hparams.max_pool(os_outputs2)
-        os_outputs3 = self.hparams.max_pool(os_outputs3)
-
-        os_outputs = torch.cat((os_outputs1,os_outputs2,os_outputs3), dim=1)
-        os_outputs = self.hparams.drop_out(os_outputs)
+        os_outputs = self.compute_cnn_outputs(os_value)
         os_outputs = self.hparams.avg_pool(os_outputs).squeeze()
         
         outputs = torch.cat((w2v2_outputs,os_outputs),1)
         # could add attention here
         outputs = torch.nn.functional.relu(self.modules.output_mlp_inter(outputs))        
-        return outputs
+
+        outputs_sp = self.modules.output_mlp_sp(outputs)
+        outputs_chn = self.modules.output_mlp_chn(outputs)
+        outputs_fan = self.modules.output_mlp_fan(outputs)    
+        outputs_man = self.modules.output_mlp_man(outputs)        
+        return outputs_sp, outputs_chn, outputs_fan, outputs_man
+
+    def compute_outputs3(self,os_value,w2v2_outputs):
+        os_outputs = self.compute_cnn_outputs(os_value)
+        os_outputs = self.hparams.avg_pool(os_outputs).squeeze()
+        
+        outputs = torch.cat((w2v2_outputs,os_outputs),1)
+
+        outputs_sp = self.hparams.max_pool_1dim(self.modules.att_sp(outputs))
+        outputs_sp = self.modules.output_mlp_sp(outputs_sp).squeeze()
+
+        outputs_chn = self.hparams.max_pool_1dim(self.modules.att_chn(outputs))
+        outputs_chn = self.modules.output_mlp_chn(outputs_chn).squeeze()
+
+        outputs_fan = self.hparams.max_pool_1dim(self.modules.att_fan(outputs))
+        outputs_fan = self.modules.output_mlp_fan(outputs_fan).squeeze()
+        
+        outputs_man = self.hparams.max_pool_1dim(self.modules.att_man(outputs))
+        outputs_man = self.modules.output_mlp_man(outputs_man).squeeze()
+                
+        return outputs_sp, outputs_chn, outputs_fan, outputs_man
 
 
     def compute_objectives(self, outputs_sp, outputs_chn, outputs_fan, outputs_man, batch, stage):

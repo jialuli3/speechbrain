@@ -386,7 +386,8 @@ def batch_pad_right(tensors: list, mode="constant", value=0):
     if len(tensors) == 1:
         # if there is only one tensor in the batch we simply unsqueeze it.
         return tensors[0].unsqueeze(0), torch.tensor([1.0])
-
+    # for t in tensors:
+    #     print(t.size())
     if not (
         any(
             [tensors[i].ndim == tensors[0].ndim for i in range(1, len(tensors))]

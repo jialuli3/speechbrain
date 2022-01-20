@@ -243,33 +243,43 @@ def dataio_prep(hparams):
     #     return os_value
 
     # Define label pipeline:
-    @sb.utils.data_pipeline.takes("sp", "chn", "fan", "man")
-    @sb.utils.data_pipeline.provides("sp_true", "chn_true", "fan_true", "man_true")
-    def label_pipeline(sp, chn, fan, man):
-        yield sp, chn, fan, man
-        sp_true, chn_true, fan_true, man_true = int(sp), int(chn)-1, int(fan)-1, int(man)-1
-        yield sp_true, chn_true, fan_true, man_true
-
     @sb.utils.data_pipeline.takes("sp")
     @sb.utils.data_pipeline.provides("sp_true")
     def label_pipeline_sp(input):
-        yield int(input)
-
+        dict_map={"CHN":1,"FAN":2,"MAN":3,"CXN":4,"SIL":0}
+        if input.isnumeric():
+            yield int(input)
+        else:
+            yield dict_map[input]
+    
     #chn, fan, and man default value as 0 for silence
     @sb.utils.data_pipeline.takes("chn")
     @sb.utils.data_pipeline.provides("chn_true")
     def label_pipeline_chn(input):
-        yield int(input)-1
+        dict_map={"CRY":0,"FUS":1,"BAB":2,"N":-1,"LAU":-1,"SCR":-1}
+        if input.isnumeric():
+            yield int(input)-1
+        else:
+            yield dict_map[input]
 
     @sb.utils.data_pipeline.takes("fan")
     @sb.utils.data_pipeline.provides("fan_true")
     def label_pipeline_fan(input):
-        yield int(input)-1
+        dict_map={"CDS":0,"FAN":1,"LAU":2,"SNG":3,"N":-1}
+        if input.isnumeric():
+            yield int(input)-1
+        else:
+            yield dict_map[input]
 
     @sb.utils.data_pipeline.takes("man")
     @sb.utils.data_pipeline.provides("man_true")
     def label_pipeline_man(input):
-        yield int(input)-1
+        dict_map={"CDS":0,"MAN":1,"LAU":2,"SNG":3,"N":-1}
+        if input.isnumeric():
+            yield int(input)-1
+        else:
+            yield dict_map[input]
+
     # Define datasets. We also connect the dataset with the data processing
     # functions defined above.
     datasets = {}
@@ -328,7 +338,7 @@ if __name__ == "__main__":
     emo_id_brain.fit(
         epoch_counter=emo_id_brain.hparams.epoch_counter,
         train_set=datasets["train"],
-        valid_set=datasets["test"],
+        valid_set=datasets["valid"],
         train_loader_kwargs=hparams["dataloader_options"],
         valid_loader_kwargs=hparams["dataloader_options"],
     )

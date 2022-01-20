@@ -862,7 +862,7 @@ class SelfAttention(nn.Module):
         self.mlp_out = nn.Linear(attn_dim, output_dim)
 
         self.scaling = scaling
-
+        
         self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, enc):
@@ -873,11 +873,12 @@ class SelfAttention(nn.Module):
         enc : torch.Tensor [B x L]
             The tensor to be attended.
         """
-
+        if len(enc.size())<3:
+            enc.unsqueeze_(1)
         xw=torch.tanh(self.mlp_in(enc))
         A=self.softmax(self.mlp_att(xw))
-        #print(enc.size(),A.size(),xw.size())
-        E=torch.matmul(enc.transpose(2,1),A)
+        E=torch.matmul(enc.transpose(-1,-2),A)
         out = self.mlp_out(E)
+        #print(A.size(),enc.size(),E.size())
         #print(out.size())
         return out
