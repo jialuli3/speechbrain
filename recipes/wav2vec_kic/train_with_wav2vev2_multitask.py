@@ -246,7 +246,7 @@ def dataio_prep(hparams):
     @sb.utils.data_pipeline.takes("sp")
     @sb.utils.data_pipeline.provides("sp_true")
     def label_pipeline_sp(input):
-        dict_map={"CHN":1,"FAN":2,"MAN":3,"CXN":4,"SIL":0}
+        dict_map={"CHN":1,"FAN":2,"MAN":3,"CXN":4,"NOI":5,"SIL":0}
         if input.isnumeric():
             yield int(input)
         else:
@@ -265,7 +265,7 @@ def dataio_prep(hparams):
     @sb.utils.data_pipeline.takes("fan")
     @sb.utils.data_pipeline.provides("fan_true")
     def label_pipeline_fan(input):
-        dict_map={"CDS":0,"FAN":1,"LAU":2,"SNG":3,"N":-1}
+        dict_map={"CDS":0,"PLA":0,"PLAC": 0,"FAN":1,"LAU":2,"LAUC":2,"SNG":3,"SNGC":3,"SHH":-1,"N":-1}
         if input.isnumeric():
             yield int(input)-1
         else:
@@ -274,7 +274,7 @@ def dataio_prep(hparams):
     @sb.utils.data_pipeline.takes("man")
     @sb.utils.data_pipeline.provides("man_true")
     def label_pipeline_man(input):
-        dict_map={"CDS":0,"MAN":1,"LAU":2,"SNG":3,"N":-1}
+        dict_map={"CDS":0,"PLA":0,"PLAC": 0,"MAN":1,"LAU":2,"LAUC":2,"SNG":3,"SNGC":3,"SHH":-1,"N":-1}
         if input.isnumeric():
             yield int(input)-1
         else:
