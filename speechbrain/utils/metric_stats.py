@@ -563,8 +563,9 @@ class KICMultitaskBinaryMetricStats(MetricStats):
     """Tracks binary metrics, such as precision, recall, F1, EER, etc.
     """
 
-    def __init__(self):
+    def __init__(self,man=True):
         self.clear()
+        self.man=man
 
     def clear(self):
         self.ids = []
@@ -591,12 +592,14 @@ class KICMultitaskBinaryMetricStats(MetricStats):
         self.preds["sp"].extend(preds[0].detach())
         self.preds["chn"].extend(preds[1].detach())
         self.preds["fan"].extend(preds[2].detach())
-        self.preds["man"].extend(preds[3].detach())
+        if self.man:
+            self.preds["man"].extend(preds[3].detach())
 
         self.labels["sp"].extend(labels[0].detach())
         self.labels["chn"].extend(labels[1].detach())
         self.labels["fan"].extend(labels[2].detach())
-        self.labels["man"].extend(labels[3].detach())
+        if self.man:
+            self.labels["man"].extend(labels[3].detach())
 
     def summarize(self, field=None, eps=1e-8):
         """Compute statistics using a full set of scores.
@@ -624,6 +627,7 @@ class KICMultitaskBinaryMetricStats(MetricStats):
         """
 
         for tier in ["sp","chn","fan","man"]:
+            if tier=="man" and (not self.man): continue
             self.curr_preds = np.argmax(torch.stack(self.preds[tier]).cpu().numpy(),axis=1)
             self.curr_labels = torch.stack(self.labels[tier]).cpu().numpy()
             
@@ -668,6 +672,7 @@ class KICMultitaskBinaryMetricStats(MetricStats):
         
         message= f"Speaker Diarization\n"
         for tier in ["sp","chn","fan","man"]:
+            if tier=="man" and (not self.man): continue
             message += f"Accuracy: {self.summary['accuracy{}'.format(tier)]}\n"
             message += f"weighted f1 score: {self.summary['weighted_f1{}'.format(tier)]}\n"
             message += f"macro f1 score: {self.summary['macro_f1{}'.format(tier)]}\n"
@@ -676,8 +681,9 @@ class KICMultitaskBinaryMetricStats(MetricStats):
                 message += f"kappa_SIL: {self.summary['kappa_0{}'.format(tier)]}\n"
                 message += f"kappa_CHN: {self.summary['kappa_1{}'.format(tier)]}\n"
                 message += f"kappa_FAN: {self.summary['kappa_2{}'.format(tier)]}\n"
-                message += f"kappa_MAN: {self.summary['kappa_3{}'.format(tier)]}\n"
-                message += f"kappa_CXN: {self.summary['kappa_4{}'.format(tier)]}\n"
+                if self.man:
+                    message += f"kappa_MAN: {self.summary['kappa_3{}'.format(tier)]}\n"
+                    message += f"kappa_CXN: {self.summary['kappa_4{}'.format(tier)]}\n"
                 try:
                     message += f"kappa_NOI: {self.summary['kappa_5{}'.format(tier)]}\n"
                 except:
@@ -693,7 +699,7 @@ class KICMultitaskBinaryMetricStats(MetricStats):
                 message += f"kappa_LAU: {self.summary['kappa_2{}'.format(tier)]}\n"
                 message += f"kappa_SNG: {self.summary['kappa_3{}'.format(tier)]}\n"
 
-            if tier=="man" :
+            if tier=="man" and self.man:
                 message += f"kappa_CDS: {self.summary['kappa_0{}'.format(tier)]}\n"
                 message += f"kappa_MAN: {self.summary['kappa_1{}'.format(tier)]}\n"
                 message += f"kappa_LAU: {self.summary['kappa_2{}'.format(tier)]}\n"
@@ -706,7 +712,7 @@ class KICMultitaskBinaryMetricStats(MetricStats):
                 message += f"CRY FUS BAB \n"
             if tier =="fan":
                 message += f"CDS  FAN  LAU  SNG \n"
-            if tier =="man":
+            if tier =="man" and self.man:
                 message += f"CDS  MAN  LAU  SNG \n"
 
             message += f"{self.summary['confusion_matrix{}'.format(tier)]}\n"
@@ -720,8 +726,9 @@ class KICMultitaskBinaryMetricStats(MetricStats):
                 message += f"kappa_SIL: {self.summary['kappa_0{}_merge'.format(tier)]}\n"
                 message += f"kappa_CHN: {self.summary['kappa_1{}_merge'.format(tier)]}\n"
                 message += f"kappa_FAN: {self.summary['kappa_2{}_merge'.format(tier)]}\n"
-                message += f"kappa_MAN: {self.summary['kappa_3{}_merge'.format(tier)]}\n"
-                message += f"kappa_CXN: {self.summary['kappa_4{}_merge'.format(tier)]}\n"
+                if self.man:
+                    message += f"kappa_MAN: {self.summary['kappa_3{}_merge'.format(tier)]}\n"
+                    message += f"kappa_CXN: {self.summary['kappa_4{}_merge'.format(tier)]}\n"
                 message += f"Confusion matrix:\n"
                 message += f"SIL CHN  FAN  MAN  CXN \n"
                 message += f"{self.summary['confusion_matrix{}_merge'.format(tier)]}\n"
