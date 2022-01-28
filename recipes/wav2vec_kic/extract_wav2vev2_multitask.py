@@ -141,38 +141,41 @@ if __name__ == "__main__":
     #    hparams["wav2vec2"].model.feature_extractor._freeze_parameters()
     hparams["checkpointer"].recover_if_possible()
     
-    json_data=load_json(hparams["train_annotation"])
-    # extract w2v2 output features
-    # for key,entry in json_data.items():
-    #     wav = entry["wav"]
-    #     len = torch.FloatTensor([entry["dur"]])
-    #     sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
-    #     sig, len =sig.to(device="cuda:0"), len.to(device="cuda:0")
-    #     outputs = hparams["wav2vec2"](sig)
+    for dataset_type in ["train","valid","test"]:
+        json_data=load_json(hparams["{}_annotation".format(dataset_type)])
+        # extract w2v2 output features
+        # for key,entry in json_data.items():
+        #     wav = entry["wav"]
+        #     len = torch.FloatTensor([entry["dur"]])
+        #     sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
+        #     sig, len =sig.to(device="cuda:0"), len.to(device="cuda:0")
+        #     outputs = hparams["wav2vec2"](sig)
 
-    #     # last dim will be used for AdaptativeAVG pool
-    #     outputs = hparams["avg_pool"](outputs, len)
-    #     outputs = outputs.view(outputs.shape[0], -1).squeeze()
-    #     outputs = outputs.detach().cpu().numpy()
-    #     entry["w2v2"]=os.path.join(hparams["w2v2_feature_out_root"],"dev",key)
-    #     sb.dataio.dataio.save_pkl(outputs,entry["w2v2"])
+        #     # last dim will be used for AdaptativeAVG pool
+        #     outputs = hparams["avg_pool"](outputs, len)
+        #     outputs = outputs.view(outputs.shape[0], -1).squeeze()
+        #     outputs = outputs.detach().cpu().numpy()
+        #     entry["w2v2"]=os.path.join(hparams["w2v2_feature_out_root"],"dev",key)
+        #     sb.dataio.dataio.save_pkl(outputs,entry["w2v2"])
 
-    # extract w2v2 output convolution features
-    for key,entry in json_data.items():
-        wav = entry["wav"]
-        len = torch.FloatTensor([entry["dur"]])
-        sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
-        sig, len =sig.to(device="cuda:0"), len.to(device="cuda:0")
-        outputs = hparams["wav2vec2"].extract_features(sig)
+        # extract w2v2 output convolution features
+        for key,entry in json_data.items():
+            wav = entry["wav"]
+            len = torch.FloatTensor([entry["dur"]])
+            sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
+            sig, len =sig.to(device="cuda:0"), len.to(device="cuda:0")
+            outputs = hparams["wav2vec2"].extract_features(sig)
 
-        # last dim will be used for AdaptativeAVG pool
-        outputs = hparams["avg_pool"](outputs, len)
-        outputs = outputs.view(outputs.shape[0], -1).squeeze()
-        outputs = outputs.detach().cpu().numpy()
-        entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],"train",key)
-        sb.dataio.dataio.save_pkl(outputs,entry["w2v2_conv"])
-        
-    write_json(json_data,hparams["train_annotation"])
+            # last dim will be used for AdaptativeAVG pool
+            outputs = hparams["avg_pool"](outputs, len)
+            outputs = outputs.view(outputs.shape[0], -1).squeeze()
+            outputs = outputs.detach().cpu().numpy()
+            if not os.path.exists(os.path.join(hparams["w2v2_conv_feature_out_root"],dataset_type)):
+                os.makedirs(os.path.join(hparams["w2v2_conv_feature_out_root"],dataset_type))
+            entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],dataset_type,key)
+            sb.dataio.dataio.save_pkl(outputs,entry["w2v2_conv"])
+            
+        write_json(json_data,hparams["{}_annotation".format(dataset_type)])
   
 
     # for i,batch in enumerate(target_dataloader):
