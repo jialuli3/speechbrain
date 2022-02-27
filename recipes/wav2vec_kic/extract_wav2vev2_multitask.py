@@ -15,8 +15,9 @@ import speechbrain as sb
 from hyperpyyaml import load_hyperpyyaml
 import torch
 import json
+import glob 
 
-def dataio_prep(hparams):
+def dataio_prep(hparams,curr_json):
     """This function prepares the datasets to be used in the brain class.
     It also defines the data processing pipeline through user-defined
     functions. We expect `prepare_mini_librispeech` to have been called before
@@ -43,62 +44,15 @@ def dataio_prep(hparams):
         sig = sb.dataio.dataio.read_audio(wav)
         return sig
 
-    # Define opensmile pipeline
-    # @sb.utils.data_pipeline.takes("os")
-    # @sb.utils.data_pipeline.provides("os_value")
-    # def os_pipeline(os_file):
-    #     """Load the signal, and pass it and its length to the corruption class.
-    #     This is done on the CPU in the `collate_fn`."""
-    #     os_value = sb.dataio.dataio.load_pickle(os_file)
-    #     return os_value
-
-    # Define label pipeline:
-    @sb.utils.data_pipeline.takes("sp")
-    @sb.utils.data_pipeline.provides("sp_true")
-    def label_pipeline_sp(input):
-        dict_map={"CHN":1,"FAN":2,"MAN":3,"CXN":4,"NOI":5,"SIL":0}
-        if isinstance(input, int):
-            yield int(input)
-        else:
-            yield dict_map[input]
-    
-    #chn, fan, and man default value as 0 for silence
-    @sb.utils.data_pipeline.takes("chn")
-    @sb.utils.data_pipeline.provides("chn_true")
-    def label_pipeline_chn(input):
-        dict_map={"CRY":0,"FUS":1,"BAB":2,"N":-1,"LAU":-1,"SCR":-1}
-        if isinstance(input, int):
-            yield int(input)-1
-        else:
-            yield dict_map[input]
-
-    @sb.utils.data_pipeline.takes("fan")
-    @sb.utils.data_pipeline.provides("fan_true")
-    def label_pipeline_fan(input):
-        dict_map={"CDS":0,"PLA":0,"PLAC": 0,"FAN":1,"LAU":2,"LAUC":2,"SNG":3,"SNGC":3,"SHH":-1,"N":-1}
-        if isinstance(input, int):
-            yield int(input)-1
-        else:
-            yield dict_map[input]
-
-    @sb.utils.data_pipeline.takes("man")
-    @sb.utils.data_pipeline.provides("man_true")
-    def label_pipeline_man(input):
-        dict_map={"CDS":0,"PLA":0,"PLAC": 0,"MAN":1,"LAU":2,"LAUC":2,"SNG":3,"SNGC":3,"SHH":-1,"N":-1}
-        if isinstance(input, int):
-            yield int(input)-1
-        else:
-            yield dict_map[input]
-
     # Define datasets. We also connect the dataset with the data processing
     # functions defined above.
     datasets = {}
-    for dataset in ["train", "valid", "test"]:
+    for dataset in ["train"]:
         datasets[dataset] = sb.dataio.dataset.DynamicItemDataset.from_json(
-            json_path=hparams[f"{dataset}_annotation"],
+            json_path=curr_json,
             replacements={"data_root": hparams["data_folder"]},
-            dynamic_items=[audio_pipeline, label_pipeline_sp, label_pipeline_chn, label_pipeline_fan, label_pipeline_man],
-            output_keys=["id", "sig", "sp_true", "chn_true", "fan_true", "man_true"],
+            dynamic_items=[audio_pipeline],
+            output_keys=["id", "sig"],
         )
 
     return datasets
@@ -133,16 +87,13 @@ if __name__ == "__main__":
     )
 
     # Create dataset objects "train", "valid", and "test".
-    datasets = dataio_prep(hparams)
+    #datasets = dataio_prep(hparams)
 
     hparams["wav2vec2"] = hparams["wav2vec2"].to("cuda:0")
-    # freeze the feature extractor part when unfreezing
-    #if not hparams["freeze_wav2vec2"] and hparams["freeze_wav2vec2_conv"]:
-    #    hparams["wav2vec2"].model.feature_extractor._freeze_parameters()
     hparams["checkpointer"].recover_if_possible()
     
-    for dataset_type in ["train","valid","test"]:
-        json_data=load_json(hparams["{}_annotation".format(dataset_type)])
+    #for dataset_type in ["train","valid","test"]:
+        #json_data=load_json(hparams["{}_annotation".format(dataset_type)])
         # extract w2v2 output features
         # for key,entry in json_data.items():
         #     wav = entry["wav"]
@@ -159,35 +110,43 @@ if __name__ == "__main__":
         #     sb.dataio.dataio.save_pkl(outputs,entry["w2v2"])
 
         # extract w2v2 output convolution features
+    all_json_files=sorted(glob.glob(hparams["train_annotations"]))
+    for curr_json_file in all_json_files: 
+        print(curr_json_file)
+        if os.path.exists(os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file))):
+            continue
+        json_data=load_json(curr_json_file)
+        #datasets = dataio_prep(hparams,curr_json_file)
+        #target_dataloader = sb.dataio.dataloader.make_dataloader(datasets["train"],shuffle=False,batch_size=hparams["batch_size"])
+
+        all_w2v2_outputs=[]
+        # for i, batch in enumerate(target_dataloader):
+        #     batch = batch.to("cuda:0")
+        #     wavs, lens = batch.sig
+        #     outputs = hparams["wav2vec2"](wavs)
+
+        #     outputs = hparams["avg_pool"](outputs, lens)
+        #     outputs = outputs.view(outputs.shape[0], -1).squeeze()
+        #     outputs = outputs.detach().cpu().numpy()
+        #     all_w2v2_outputs.extend(outputs)
+        # for i,(key,entry) in enumerate(json_data.items()):
+        #     entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],key)
+        #     sb.dataio.dataio.save_pkl(all_w2v2_outputs[i],entry["w2v2_conv"])
+
         for key,entry in json_data.items():
+            print(key)
             wav = entry["wav"]
-            len = torch.FloatTensor([entry["dur"]])
+            #len = torch.FloatTensor([entry["dur"]])
+            len = torch.FloatTensor([2.0])
             sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
             sig, len =sig.to(device="cuda:0"), len.to(device="cuda:0")
-            outputs = hparams["wav2vec2"].extract_features(sig)
+            outputs = hparams["wav2vec2"](sig)
 
             # last dim will be used for AdaptativeAVG pool
             outputs = hparams["avg_pool"](outputs, len)
             outputs = outputs.view(outputs.shape[0], -1).squeeze()
             outputs = outputs.detach().cpu().numpy()
-            if not os.path.exists(os.path.join(hparams["w2v2_conv_feature_out_root"],dataset_type)):
-                os.makedirs(os.path.join(hparams["w2v2_conv_feature_out_root"],dataset_type))
-            entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],dataset_type,key)
+            entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],key)
             sb.dataio.dataio.save_pkl(outputs,entry["w2v2_conv"])
-            
-        write_json(json_data,hparams["{}_annotation".format(dataset_type)])
-  
 
-    # for i,batch in enumerate(target_dataloader):
-
-    #     batch = batch.to("cuda:0")
-    #     wavs, lens = batch.sig
-    #     print(wavs.size(),lens.size())
-    #     outputs = hparams["wav2vec2"](wavs)
-
-    #     # last dim will be used for AdaptativeAVG pool
-    #     outputs = hparams["avg_pool"](outputs, lens)
-    #     outputs = outputs.view(outputs.shape[0], -1)
-        
-    #     break
-
+        write_json(json_data,os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file)))  

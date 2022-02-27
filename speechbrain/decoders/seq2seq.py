@@ -624,7 +624,6 @@ class S2SBeamSearcher(S2SBaseSearcher):
             # terminate condition
             if self._check_full_beams(hyps_and_scores, self.beam_size):
                 break
-
             log_probs, memory, attn = self.forward_step(
                 inp_tokens, memory, enc_states, enc_lens
             )

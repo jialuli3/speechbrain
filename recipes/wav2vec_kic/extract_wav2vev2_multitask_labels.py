@@ -133,10 +133,13 @@ if __name__ == "__main__":
     all_json_files=sorted(glob.glob(hparams["train_annotations"]))
     for curr_json_file in all_json_files:
         print(curr_json_file)
+        if os.path.exists(os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file))):
+            continue        
         datasets = dataio_prep(hparams,curr_json_file)
         target_dataloader = sb.dataio.dataloader.make_dataloader(datasets["train"],shuffle=False,batch_size=hparams["batch_size"])
 
         labels_sp,labels_chn,labels_fan,labels_man=[],[],[],[]
+        all_w2v2_outputs=[]
         for i, batch in enumerate(target_dataloader):
             batch = batch.to("cuda:0")
             wavs, lens = batch.sig
@@ -161,6 +164,10 @@ if __name__ == "__main__":
             predictions_fan = np.argmax(predictions_fan.cpu().detach().numpy(),axis=1)
             predictions_man = np.argmax(predictions_man.cpu().detach().numpy(),axis=1)
 
+            outputs = outputs.view(outputs.shape[0], -1).squeeze()
+            outputs = outputs.detach().cpu().numpy()
+            all_w2v2_outputs.extend(outputs)
+
             curr_labels_sp,curr_labels_chn,curr_labels_fan,curr_labels_man=outputs2labels(predictions_sp,predictions_chn,predictions_fan,predictions_man)
             # assert(len(curr_labels_sp)==hparams["batch_size"])
             # assert(len(curr_labels_chn)==hparams["batch_size"])
@@ -179,4 +186,6 @@ if __name__ == "__main__":
             entry["chn"]=labels_chn[i]
             entry["fan"]=labels_fan[i]
             entry["man"]=labels_man[i]
+            entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],key)
+            sb.dataio.dataio.save_pkl(all_w2v2_outputs[i],entry["w2v2_conv"])
         write_json(json_data,os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file)))

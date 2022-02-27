@@ -90,10 +90,18 @@ def torch_recovery(obj, path, end_of_epoch, device=None):
     """
     del end_of_epoch  # Unused
     try:
-        obj.load_state_dict(torch.load(path, map_location=device), strict=True)
+        pretrain = torch.load(path, map_location=device)
+        if isinstance(pretrain, collections.OrderedDict):
+            model_dict = obj.state_dict()
+            for k,v in model_dict.items():
+                if k in pretrain and v.size()==pretrain[k].size():
+                    model_dict[k]=pretrain[k]
+            obj.load_state_dict(model_dict)
+        else:
+            obj.load_state_dict(torch.load(path, map_location=device), strict=True)
     except TypeError:
         obj.load_state_dict(torch.load(path, map_location=device))
-
+        
 
 def torch_save(obj, path):
     """Saves the obj's parameters to path.
@@ -771,6 +779,7 @@ class Checkpointer:
         ckpts = list(filter(ckpt_predicate, ckpts))
         # First sort by recency, so that importance being equal,
         # the most checkpoints are returned
+
         ckpts = sorted(ckpts, key=ckpt_recency, reverse=True)
         if ckpts:
             ranked_ckpts = sorted(ckpts, key=importance_key, reverse=True)

@@ -246,8 +246,8 @@ def dataio_prep(hparams):
     @sb.utils.data_pipeline.takes("sp")
     @sb.utils.data_pipeline.provides("sp_true")
     def label_pipeline_sp(input):
-        dict_map={"CHN":1,"FAN":2,"MAN":3,"CXN":4,"NOI":5,"SIL":0}
-        if input.isnumeric():
+        dict_map={"CHN":1,"FAN":2,"MAN":3,"CXN":4,"MIX":5,"SIL":0}
+        if isinstance(input, int):
             yield int(input)
         else:
             yield dict_map[input]
@@ -257,7 +257,7 @@ def dataio_prep(hparams):
     @sb.utils.data_pipeline.provides("chn_true")
     def label_pipeline_chn(input):
         dict_map={"CRY":0,"FUS":1,"BAB":2,"N":-1,"LAU":-1,"SCR":-1}
-        if input.isnumeric():
+        if isinstance(input, int):
             yield int(input)-1
         else:
             yield dict_map[input]
@@ -266,7 +266,7 @@ def dataio_prep(hparams):
     @sb.utils.data_pipeline.provides("fan_true")
     def label_pipeline_fan(input):
         dict_map={"CDS":0,"PLA":0,"PLAC": 0,"FAN":1,"LAU":2,"LAUC":2,"SNG":3,"SNGC":3,"SHH":-1,"N":-1}
-        if input.isnumeric():
+        if isinstance(input, int):
             yield int(input)-1
         else:
             yield dict_map[input]
@@ -275,7 +275,7 @@ def dataio_prep(hparams):
     @sb.utils.data_pipeline.provides("man_true")
     def label_pipeline_man(input):
         dict_map={"CDS":0,"PLA":0,"PLAC": 0,"MAN":1,"LAU":2,"LAUC":2,"SNG":3,"SNGC":3,"SHH":-1,"N":-1}
-        if input.isnumeric():
+        if isinstance(input, int):
             yield int(input)-1
         else:
             yield dict_map[input]

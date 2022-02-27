@@ -15,7 +15,8 @@ wav2vec2_hub: facebook/wav2vec2-base
 
 # Data files
 #data_folder: !PLACEHOLDER  # e.g, /localscratch/cv-corpus-5.1-2020-06-22/fr
-data_folder: /ws/ifp-05_1/hasegawa/jialuli3/KIC-PH2/KIC_files_15832/all_wav
+#data_folder: /ws/ifp-05_1/hasegawa/jialuli3/KIC-PH2/KIC_files_15832/all_wav
+data_folder: /media/jialu/disk1/KIC-PH2/KIC_files_15832/all_wav
 # train_tsv_file: !ref <data_folder>/validated.tsv  # Standard CommonVoice .tsv files
 # dev_tsv_file: !ref <data_folder>/dev.tsv  # Standard CommonVoice .tsv files
 # test_tsv_file: !ref <data_folder>/test.tsv  # Standard CommonVoice .tsv files

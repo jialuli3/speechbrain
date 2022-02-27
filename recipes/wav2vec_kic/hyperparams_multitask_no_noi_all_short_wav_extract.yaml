@@ -12,14 +12,12 @@ seed: 1992
 __set_seed: !apply:torch.manual_seed [1992]
 
 # Dataset will be downloaded to the `data_original`
-#data_folder: /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out-split1 # e.g, /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out
-data_folder: /media/jialu/Elements/LENA_110 # e.g, /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out
-output_folder: results/wav2vec2_base_fold1_multitask_lena/1992_reduce
-save_folder: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/save
-train_log: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/train_log.txt
-output_log: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/output_log.txt
-record_log: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/record_log.txt
-
+#data_folder: /ws/ifp-05_1/hasegawa/jialuli3/KIC-PH2/KIC_files_15832/short_wav/2s_wav # e.g, /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out
+data_folder: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/short_wav/2s_wav # e.g, /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out
+output_folder: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav
+save_folder: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/save
+train_log: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/train_log.txt
+output_log: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/output_log.txt
 pretrain_path: /workspace/data_paper2/
 
 # URL for the wav2vec2 model, you can change to benchmark diffrenet models
@@ -32,25 +30,24 @@ wav2vec2_hub: facebook/wav2vec2-base
 different_speakers: false
 
 # Path where data manifest files will be stored
-# train_annotation: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/train.json
-# valid_annotation: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/test.json
-# test_annotation: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/test.json
-
-train_annotation: /media/jialu/Elements/LENA_110/features/sb/reduce/train.json
-valid_annotation: /media/jialu/Elements/LENA_110/features/sb/reduce/dev.json
-test_annotation: /media/jialu/Elements/LENA_110/features/sb/reduce/test.json
-
+train_annotations: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/all_wav_labels4/*.json
+out_json_prefix: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/all_wav_labels_w2v2
 # The train logger writes training statistics to a file, as well as stdout.
 train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
-  save_file: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/train_log.txt
+  save_file: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/train_log.txt
+w2v2_conv_feature_out_root: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/w2v2
 
 ckpt_interval_minutes: 15 # save checkpoint every N min
 
 # Training parameters
 number_of_epochs: 60
-batch_size: 256
+batch_size: 1
 lr: 0.0001
 lr_wav2vec2: 0.00001
+
+#whether to add triplet_loss
+use_triplet_loss: false
+triplet_anchor_idx: 0
 
 #freeze all wav2vec2
 freeze_wav2vec2: false
@@ -61,13 +58,16 @@ freeze_wav2vec2_conv: true
 # Model parameters
 encoder_dim: 768
 
-# Number of emotions
-out_n_neurons: 6 # (anger, happiness, sadness, neutral)
+#multitask learning weights
+# sp_weights: 0.5
+# chn_weights: 0.3
+# fan_weights: 0.1
+# man_weights: 0.1
 
 dataloader_options:
   batch_size: !ref <batch_size>
   shuffle: true
-  num_workers: 2    # 2 on linux but 0 works on windows
+  num_workers: 1    # 2 on linux but 0 works on windows
   drop_last: false
 
 # Wav2vec2 encoder
@@ -76,7 +76,7 @@ wav2vec2: &id001 !new:speechbrain.lobes.models.huggingface_wav2vec.HuggingFaceWa
   output_norm: false
   freeze: false
   freeze_feature_extractor: true
-  save_path: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/save/wav2vec2_checkpoint
+  save_path: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/save/wav2vec2_checkpoint
 
 avg_pool: !new:speechbrain.nnet.pooling.StatisticsPooling
   return_std: false
@@ -118,6 +118,7 @@ log_softmax: !new:speechbrain.nnet.activations.Softmax
   apply_log: true
 
 compute_cost: !name:speechbrain.nnet.losses.nll_loss
+triplet_loss_cost: !name:speechbrain.nnet.losses.triplet_margin_loss
 
 error_stats: !name:speechbrain.utils.metric_stats.MetricStats
   metric: !name:speechbrain.nnet.losses.classification_error
@@ -143,7 +144,7 @@ lr_annealing_wav2vec2: &id005 !new:speechbrain.nnet.schedulers.NewBobScheduler
   annealing_factor: 0.9
 
 checkpointer: !new:speechbrain.utils.checkpoints.Checkpointer
-  checkpoints_dir: results/wav2vec2_base_fold1_multitask_lena/1992_reduce/save
+  checkpoints_dir: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/save
   recoverables:
     model: *id003
     wav2vec2: *id001

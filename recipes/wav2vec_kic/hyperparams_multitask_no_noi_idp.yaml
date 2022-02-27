@@ -30,9 +30,11 @@ wav2vec2_hub: facebook/wav2vec2-base
 different_speakers: false
 
 # Path where data manifest files will be stored
-train_annotation: /ws/ifp-05_1/hasegawa/jialuli3/IDP_speech/features/noi_label/train_no_noi.json
-valid_annotation: /ws/ifp-05_1/hasegawa/jialuli3/IDP_speech/features/noi_label/dev_no_noi.json
-test_annotation: /ws/ifp-05_1/hasegawa/jialuli3/IDP_speech/features/noi_label/test_no_noi.json
+train_annotation: /media/jialu/Backup Plus/IDP_speech/features/noi_label/train_no_noi.json
+valid_annotation: /media/jialu/Backup Plus/IDP_speech/features/noi_label/dev_no_noi.json
+test_annotation: /media/jialu/Backup Plus/IDP_speech/features/noi_label/test_no_noi.json
+w2v2_feature_out_root: /media/jialu/Backup Plus/IDP_speech/features/w2v2/noi_label/
+w2v2_conv_feature_out_root: /media/jialu/Backup Plus/IDP_speech/features/w2v2_conv/noi_label/
 
 # The train logger writes training statistics to a file, as well as stdout.
 train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
