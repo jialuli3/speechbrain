@@ -12,8 +12,8 @@ seed: 1992
 __set_seed: !apply:torch.manual_seed [1992]
 
 # Dataset will be downloaded to the `data_original`
-#data_folder: /ws/ifp-05_1/hasegawa/jialuli3/KIC-PH2/KIC_files_15832/short_wav/2s_wav # e.g, /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out
-data_folder: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/short_wav/2s_wav # e.g, /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out
+data_folder: /ws/ifp-05_1/hasegawa/jialuli3/KIC-PH2/KIC_files_15832/short_wav/2s_wav # e.g, /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out
+#data_folder: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/short_wav/2s_wav # e.g, /workspace/data/IEMOCAP/IEMOCAP_ahsn_leave-two-speaker-out
 output_folder: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav
 save_folder: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/save
 train_log: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/train_log.txt
@@ -28,14 +28,21 @@ wav2vec2_hub: facebook/wav2vec2-base
 # different speakers for train, valid and test sets
 # (more challenging exercise: higher error rate)
 different_speakers: false
+extract_labels: true
+extract_w2v2_conv: true
+compute_energy: true
 
 # Path where data manifest files will be stored
-train_annotations: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/all_wav_labels4/*.json
-out_json_prefix: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/all_wav_labels_w2v2
+train_annotations: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/all_wav_labels/*ID7204*.json
+#train_annotations: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/short_wav_all/features/noi_label/total_no_noi.json
+
+out_json_prefix: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/all_wav_labels_w2v2_prob
+#out_json_prefix: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/short_wav_all/features/noi_label/total_no_noi_w2v2_labels.json
+
 # The train logger writes training statistics to a file, as well as stdout.
 train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
   save_file: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/train_log.txt
-w2v2_conv_feature_out_root: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/w2v2
+w2v2_conv_feature_out_root: /media/jialu/Backup Plus/KIC-PH2/KIC_files_15832/all_wav/features/w2v2_ID7204
 
 ckpt_interval_minutes: 15 # save checkpoint every N min
 
@@ -74,7 +81,7 @@ dataloader_options:
 wav2vec2: &id001 !new:speechbrain.lobes.models.huggingface_wav2vec.HuggingFaceWav2Vec2
   source: facebook/wav2vec2-base
   output_norm: false
-  freeze: false
+  freeze: true
   freeze_feature_extractor: true
   save_path: results/wav2vec2_base_fold1_multitask_no_noi/1992_all_short_wav/save/wav2vec2_checkpoint
 
@@ -116,6 +123,8 @@ model: &id003 !new:torch.nn.ModuleList
 
 log_softmax: !new:speechbrain.nnet.activations.Softmax
   apply_log: true
+
+softmax: !new:speechbrain.nnet.activations.Softmax
 
 compute_cost: !name:speechbrain.nnet.losses.nll_loss
 triplet_loss_cost: !name:speechbrain.nnet.losses.triplet_margin_loss

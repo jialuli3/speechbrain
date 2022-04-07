@@ -9,6 +9,7 @@ Authors
  * Yingzhi WANG 2021
 """
 
+from hashlib import new
 import os
 import sys
 import speechbrain as sb
@@ -16,6 +17,7 @@ from hyperpyyaml import load_hyperpyyaml
 import torch
 import json
 import glob 
+import numpy as np
 
 def dataio_prep(hparams,curr_json):
     """This function prepares the datasets to be used in the brain class.
@@ -66,6 +68,47 @@ def load_json(path):
     f=open(path,"r")
     return json.load(f)
 
+def outputs2labels(predictions_sp,predictions_chn,predictions_fan,predictions_man):
+    dict_map_sp={1:"CHN",2:"FAN",3:"MAN",4:"CXN",0:"SIL"}    
+    dict_map_chn={0:"CRY",1:"FUS",2:"BAB"}
+    dict_map_fan={0:"CDS",1:"FAN",2:"LAU",3:"SNG"}
+    dict_map_man={0:"CDS",1:"MAN",2:"LAU",3:"SNG"}
+    
+    labels_sp,labels_chn,labels_fan,labels_man=[],[],[],[]
+
+    for i,pred in enumerate(predictions_sp):
+        if dict_map_sp[pred]=="SIL":
+            labels_sp.append("SIL")
+            labels_chn.append("SIL")
+            labels_fan.append("SIL")
+            labels_man.append("SIL")
+        elif dict_map_sp[pred]=="CHN":
+            labels_sp.append(dict_map_sp[pred])
+            labels_chn.append(dict_map_chn[predictions_chn[i]])
+            labels_fan.append("SIL")
+            labels_man.append("SIL")        
+        elif dict_map_sp[pred]=="FAN":
+            labels_sp.append(dict_map_sp[pred])
+            labels_chn.append("SIL")
+            labels_fan.append(dict_map_fan[predictions_fan[i]])
+            labels_man.append("SIL") 
+        elif dict_map_sp[pred]=="MAN":
+            labels_sp.append(dict_map_sp[pred])
+            labels_chn.append("SIL")
+            labels_fan.append("SIL")             
+            labels_man.append(dict_map_man[predictions_man[i]])
+        else:
+            labels_sp.append(dict_map_sp[pred])
+            labels_chn.append("SIL")
+            labels_fan.append("SIL")
+            labels_man.append("SIL")
+    return labels_sp,labels_chn,labels_fan,labels_man
+
+def check_range(keys):
+    #return keys.endswith("0.0") or keys.endswith("2.0") or keys.endswith("4.0") or keys.endswith("6.0") or keys.endswith("8.0")
+    return keys.endswith(".0")
+
+
 # RECIPE BEGINS!
 if __name__ == "__main__":
 
@@ -90,63 +133,85 @@ if __name__ == "__main__":
     #datasets = dataio_prep(hparams)
 
     hparams["wav2vec2"] = hparams["wav2vec2"].to("cuda:0")
-    hparams["checkpointer"].recover_if_possible()
-    
-    #for dataset_type in ["train","valid","test"]:
-        #json_data=load_json(hparams["{}_annotation".format(dataset_type)])
-        # extract w2v2 output features
-        # for key,entry in json_data.items():
-        #     wav = entry["wav"]
-        #     len = torch.FloatTensor([entry["dur"]])
-        #     sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
-        #     sig, len =sig.to(device="cuda:0"), len.to(device="cuda:0")
-        #     outputs = hparams["wav2vec2"](sig)
+    if hparams["extract_labels"]:
+        hparams["output_mlp_sp"] = hparams["output_mlp_sp"].to("cuda:0")
+        hparams["output_mlp_chn"] = hparams["output_mlp_chn"].to("cuda:0")
+        hparams["output_mlp_fan"] = hparams["output_mlp_fan"].to("cuda:0")
+        hparams["output_mlp_man"] = hparams["output_mlp_man"].to("cuda:0")
 
-        #     # last dim will be used for AdaptativeAVG pool
-        #     outputs = hparams["avg_pool"](outputs, len)
-        #     outputs = outputs.view(outputs.shape[0], -1).squeeze()
-        #     outputs = outputs.detach().cpu().numpy()
-        #     entry["w2v2"]=os.path.join(hparams["w2v2_feature_out_root"],"dev",key)
-        #     sb.dataio.dataio.save_pkl(outputs,entry["w2v2"])
+    hparams["wav2vec2"].model.feature_extractor._freeze_parameters()
+    hparams["checkpointer"].recover_if_possible(min_key="error_rate_kappa")
 
-        # extract w2v2 output convolution features
+    # extract w2v2 output convolution features
     all_json_files=sorted(glob.glob(hparams["train_annotations"]))
     for curr_json_file in all_json_files: 
         print(curr_json_file)
-        if os.path.exists(os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file))):
-            continue
+        #if os.path.exists(os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file))): continue        
         json_data=load_json(curr_json_file)
-        #datasets = dataio_prep(hparams,curr_json_file)
-        #target_dataloader = sb.dataio.dataloader.make_dataloader(datasets["train"],shuffle=False,batch_size=hparams["batch_size"])
-
-        all_w2v2_outputs=[]
-        # for i, batch in enumerate(target_dataloader):
-        #     batch = batch.to("cuda:0")
-        #     wavs, lens = batch.sig
-        #     outputs = hparams["wav2vec2"](wavs)
-
-        #     outputs = hparams["avg_pool"](outputs, lens)
-        #     outputs = outputs.view(outputs.shape[0], -1).squeeze()
-        #     outputs = outputs.detach().cpu().numpy()
-        #     all_w2v2_outputs.extend(outputs)
-        # for i,(key,entry) in enumerate(json_data.items()):
-        #     entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],key)
-        #     sb.dataio.dataio.save_pkl(all_w2v2_outputs[i],entry["w2v2_conv"])
-
+        new_json_data={}
         for key,entry in json_data.items():
-            print(key)
-            wav = entry["wav"]
+            start,end=key.split("_")[-2],key.split("_")[-1]
+            
+            #if not check_range(end): continue
+            prefix_dir="/".join(entry["wav"]["file"].split("/")[:-2])
+            wav = os.path.join(prefix_dir,"2s",key+".wav")
+
+            #wav=entry["wav"]
+            try:
+                sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
+            except:
+                print(wav)
+                continue
             #len = torch.FloatTensor([entry["dur"]])
             len = torch.FloatTensor([2.0])
-            sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
             sig, len =sig.to(device="cuda:0"), len.to(device="cuda:0")
-            outputs = hparams["wav2vec2"](sig)
+            outputs_conv = hparams["wav2vec2"].extract_features(sig)
+            outputs_conv = hparams["avg_pool"](outputs_conv, len)
+            outputs_conv = outputs_conv.detach().cpu().numpy().flatten()
 
-            # last dim will be used for AdaptativeAVG pool
-            outputs = hparams["avg_pool"](outputs, len)
-            outputs = outputs.view(outputs.shape[0], -1).squeeze()
-            outputs = outputs.detach().cpu().numpy()
-            entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],key)
-            sb.dataio.dataio.save_pkl(outputs,entry["w2v2_conv"])
+            if hparams["extract_labels"]:
+                outputs = hparams["wav2vec2"](sig)
 
-        write_json(json_data,os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file)))  
+                # last dim will be used for AdaptativeAVG pool
+                outputs = hparams["avg_pool"](outputs, len)
+
+                outputs_sp = hparams["output_mlp_sp"](outputs)
+                outputs_chn = hparams["output_mlp_chn"](outputs)
+                outputs_fan = hparams["output_mlp_fan"](outputs)    
+                outputs_man = hparams["output_mlp_man"](outputs)
+
+                prob_sp = hparams["softmax"](outputs_sp).flatten().cpu().detach().numpy()
+                prob_chn = hparams["softmax"](outputs_chn).flatten().cpu().detach().numpy()
+                prob_fan = hparams["softmax"](outputs_fan).flatten().cpu().detach().numpy()
+                prob_man = hparams["softmax"](outputs_man).flatten().cpu().detach().numpy()
+
+                predictions_sp = hparams["log_softmax"](outputs_sp).flatten()
+                predictions_chn = hparams["log_softmax"](outputs_chn).flatten()
+                predictions_fan = hparams["log_softmax"](outputs_fan).flatten()
+                predictions_man = hparams["log_softmax"](outputs_man).flatten()
+
+                predictions_sp = [np.argmax(predictions_sp.cpu().detach().numpy())]
+                predictions_chn = [np.argmax(predictions_chn.cpu().detach().numpy())]
+                predictions_fan = [np.argmax(predictions_fan.cpu().detach().numpy())]
+                predictions_man = [np.argmax(predictions_man.cpu().detach().numpy())]
+
+                out_sp,out_chn,out_fan,out_man=outputs2labels(predictions_sp,predictions_chn,predictions_fan,predictions_man)
+                entry["sp"]=out_sp[0]
+                entry["chn"]=out_chn[0]
+                entry["fan"]=out_fan[0]
+                entry["man"]=out_man[0]
+                entry["sp_prob"]=str(max(prob_sp))
+                entry["chn_prob"]=str(max(prob_chn))
+                entry["fan_prob"]=str(max(prob_fan))
+                entry["man_prob"]=str(max(prob_man))
+            if hparams["compute_energy"]:
+                sig = sig.cpu().detach().numpy().flatten()
+                if max(sig)>1: sig/=32767
+                entry["energy"]=str(max(-6,np.log10(np.mean(np.square(sig)))))
+            if hparams["extract_w2v2_conv"]:
+                entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],key)
+                if not os.path.exists(entry["w2v2_conv"]):
+                    sb.dataio.dataio.save_pkl(outputs_conv,entry["w2v2_conv"])
+            new_json_data[key]=entry
+        write_json(new_json_data,os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file)))  
+        #write_json(new_json_data,hparams["out_json_prefix"])  

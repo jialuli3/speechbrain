@@ -133,8 +133,8 @@ if __name__ == "__main__":
     all_json_files=sorted(glob.glob(hparams["train_annotations"]))
     for curr_json_file in all_json_files:
         print(curr_json_file)
-        if os.path.exists(os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file))):
-            continue        
+        # if os.path.exists(os.path.join(hparams["out_json_prefix"],os.path.basename(curr_json_file))):
+        #     continue        
         datasets = dataio_prep(hparams,curr_json_file)
         target_dataloader = sb.dataio.dataloader.make_dataloader(datasets["train"],shuffle=False,batch_size=hparams["batch_size"])
 
@@ -143,6 +143,7 @@ if __name__ == "__main__":
         for i, batch in enumerate(target_dataloader):
             batch = batch.to("cuda:0")
             wavs, lens = batch.sig
+            outputs_conv = hparams["wav2vec2"].extract_features(wavs)
             outputs = hparams["wav2vec2"](wavs)
 
             # last dim will be used for AdaptativeAVG pool
