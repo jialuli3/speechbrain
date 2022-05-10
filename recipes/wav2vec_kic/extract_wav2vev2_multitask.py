@@ -151,19 +151,19 @@ if __name__ == "__main__":
         new_json_data={}
         for key,entry in json_data.items():
             start,end=key.split("_")[-2],key.split("_")[-1]
-            
+            print(key)
             #if not check_range(end): continue
-            prefix_dir="/".join(entry["wav"]["file"].split("/")[:-2])
-            wav = os.path.join(prefix_dir,"2s",key+".wav")
+            #prefix_dir="/".join(entry["wav"]["file"].split("/")[:-2])
+            #wav = os.path.join(prefix_dir,"2s",key+".wav")
 
-            #wav=entry["wav"]
+            wav=entry["wav"]
             try:
                 sig = sb.dataio.dataio.read_audio(wav).unsqueeze(0)
             except:
                 print(wav)
                 continue
-            #len = torch.FloatTensor([entry["dur"]])
-            len = torch.FloatTensor([2.0])
+            len = torch.FloatTensor([entry["dur"]])
+            #len = torch.FloatTensor([2.0])
             sig, len =sig.to(device="cuda:0"), len.to(device="cuda:0")
             outputs_conv = hparams["wav2vec2"].extract_features(sig)
             outputs_conv = hparams["avg_pool"](outputs_conv, len)
@@ -209,6 +209,8 @@ if __name__ == "__main__":
                 if max(sig)>1: sig/=32767
                 entry["energy"]=str(max(-6,np.log10(np.mean(np.square(sig)))))
             if hparams["extract_w2v2_conv"]:
+                if not os.path.exists(hparams["w2v2_conv_feature_out_root"]):
+                    os.mkdir(hparams["w2v2_conv_feature_out_root"])
                 entry["w2v2_conv"]=os.path.join(hparams["w2v2_conv_feature_out_root"],key)
                 if not os.path.exists(entry["w2v2_conv"]):
                     sb.dataio.dataio.save_pkl(outputs_conv,entry["w2v2_conv"])
