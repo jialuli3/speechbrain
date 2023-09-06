@@ -1,0 +1,23 @@
+{
+    "RA054_complete_17.7_17.8": {
+      "wav_adu": "/ws/ifp-10_1/hasegawa/jialuli3/RABC/RABC_5mins_16khz/2s_wav_16KHz/RA054_2012_08_09_mic_examiner_16.8_18.8.wav",
+      "wav_chi": "/ws/ifp-10_1/hasegawa/jialuli3/RABC/RABC_5mins_16khz/2s_wav_16KHz/RA054_2012_08_09_mic_child_16.8_18.8.wav",
+      "dur": 2.0,
+      "ADU": "N",
+      "CHI": "vocalization"
+    },
+    "RA054_complete_17.8_17.9": {
+      "wav_adu": "/ws/ifp-10_1/hasegawa/jialuli3/RABC/RABC_5mins_16khz/2s_wav_16KHz/RA054_2012_08_09_mic_examiner_16.9_18.9.wav",
+      "wav_chi": "/ws/ifp-10_1/hasegawa/jialuli3/RABC/RABC_5mins_16khz/2s_wav_16KHz/RA054_2012_08_09_mic_child_16.9_18.9.wav",
+      "dur": 2.0,
+      "ADU": "N",
+      "CHI": "vocalization"
+    },
+    "RA054_complete_17.9_18.0": {
+      "wav_adu": "/ws/ifp-10_1/hasegawa/jialuli3/RABC/RABC_5mins_16khz/2s_wav_16KHz/RA054_2012_08_09_mic_examiner_17.0_19.0.wav",
+      "wav_chi": "/ws/ifp-10_1/hasegawa/jialuli3/RABC/RABC_5mins_16khz/2s_wav_16KHz/RA054_2012_08_09_mic_child_17.0_19.0.wav",
+      "dur": 2.0,
+      "ADU": "N",
+      "CHI": "vocalization"
+    }
+}
