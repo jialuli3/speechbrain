@@ -50,7 +50,7 @@ Vocalization types include:
 - Change data paths in *train_annotation*, *valid_annotation*, and *test_annotation*
 - Download W2V2-LL4300h [here](https://huggingface.co/lijialudew/wav2vec_LittleBeats_LENA/tree/main/LL_4300)
 - Download W2V2-Pro or W2V2-MyST [here](https://huggingface.co/lijialudew/wav2vec_Providence/tree/main)
-- **Copy *wav2vec2.ckpt* from the checkpoint folder to the <save_folder> path specified in the *hparams* file (if <save_folder> not exists, create one)**
+- **Copy *wav2vec2.ckpt* from the W2V2-Pro checkpoint folder to the <save_folder> path specified in the *hparams* file (if <save_folder> does not exists, create one)**
 
 ### Fine-tune wav2vec2 model on speaker diarization and parent/infant vocalization classification tasks ###
 Before running Python script, first run
@@ -64,7 +64,7 @@ Run the following commands to fine-tune wav2vec2 using our developed recipe
 # Fine-tune wav2vec2-LL4300h only
 python scripts/train_1_w2v2_WA_2dnn.py hparams/train_1_w2v2_2dnn_WA_LL4300_bbcor.yaml
 
-# Train wav2vec2 with ASR features over all transformer layers
+# Train wav2vec2 with ASR features 
 python scripts/train_1_w2v2_WA_2dnn_combine_asr_features_bbcor.py hparams/train_1_w2v2_2dnn_WA_LL4300_asr_bbcor_concat.yaml
 ```
 
