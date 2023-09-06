@@ -60,7 +60,7 @@ Sample json file we used in our experiments can be found in **sample_json/sample
 - **Copy *wav2vec2.ckpt* from the W2V2-Pro checkpoint folder to the <save_folder> path specified in the *hparams* file (if <save_folder> does not exists, create one)**
 
 
-### Fine-tune wav2vec2 model on speaker diarization and parent/infant vocalization classification tasks ###
+### Fine-tune wav2vec2 model on speaker diarization and children vocalization classification tasks ###
 Before running Python script, first run
 ```
 cd recipes/RABC
