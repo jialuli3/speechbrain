@@ -1,4 +1,4 @@
-## LittleBeats family audio analysis: parent/infant speaker diarizatio and vocalization classification tasks 
+## Rapid-ABC: clinician-child speaker diarizatio and vocalization classification analysis 
 This recipe is developed based on SpeechBrain toolkit. This recipe contains scripts for training and testing child-adult speaker diarization and vocalization classifications using wav2vec 2.0 model on Rapid-ABC corpus.
 
 ## Uses
