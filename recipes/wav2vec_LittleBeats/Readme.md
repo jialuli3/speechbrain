@@ -104,7 +104,12 @@ python scripts/train_WA_wav_aug_on_sp_spk_domain.py hparams/hparams_LL_4300_WA_a
 ### Paper/BibTex Citation
 If you found this recipe or our paper helpful, please cite us as
 
-Coming soon
+@article{li2023towards,
+  title={Towards Robust Family-Infant Audio Analysis Based on Unsupervised Pretraining of Wav2vec 2.0 on Large-Scale Unlabeled Family Audio},
+  author={Li, Jialu and Hasegawa-Johnson, Mark and McElwain, Nancy L},
+  journal={Interspeech},
+  year={2023}
+}
 
 ### Contact
 Jialu Li (she, her, hers)
