@@ -44,14 +44,6 @@ wav2vec2: &id001 !new:speechbrain.lobes.models.fairseq_wav2vec.FairseqWav2Vec2
   freeze: false
   save_path: results/wav2vec2_base_fold1/1992/save_2s_3dnn_LL4300/wav2vec_LL_4300.pt
 
-# to use Original wav2vec-base encoder, uncomment the following block 
-# wav2vec2: &id001 !new:speechbrain.lobes.models.huggingface_wav2vec.HuggingFaceWav2Vec2
-#   source: facebook/wav2vec2-base
-#   output_norm: false
-#   freeze: false
-#   freeze_feature_extractor: false
-#   save_path: results/wav2vec2_base_fold1/1992/save_2s_3dnn_wav2vec_base
-
 avg_pool: !new:speechbrain.nnet.pooling.StatisticsPooling
   return_std: false
 
@@ -110,7 +102,7 @@ error_stats: !name:speechbrain.utils.metric_stats.MetricStats
     reduction: batch
 
 error_stats_kic: !name:speechbrain.utils.metric_stats.KICMultitaskBinaryMetricStats
-  record_man: false
+  record_man: false # If True, ADU classification is separated into MAN or FAN; If False, ADU classification is not separated 
 
 opt_class: !name:torch.optim.Adam
   lr: !ref <lr>
