@@ -379,7 +379,10 @@ def pad_right_to(
             target_shape[i] >= tensor.shape[i]
         ), "Target shape must be >= original shape for every dim"
         pads.extend([0, target_shape[i] - tensor.shape[i]])
-        valid_vals.append(tensor.shape[j] / target_shape[j])
+        if target_shape[j]==0:
+            valid_vals.append(1e-6)
+        else:
+            valid_vals.append(tensor.shape[j] / target_shape[j])
         i -= 1
         j += 1
 
@@ -416,7 +419,8 @@ def batch_pad_right(tensors: list, mode="constant", value=0):
     if len(tensors) == 1:
         # if there is only one tensor in the batch we simply unsqueeze it.
         return tensors[0].unsqueeze(0), torch.tensor([1.0])
-
+    # for t in tensors:
+    #     print(t.size())
     if not (
         any(
             [tensors[i].ndim == tensors[0].ndim for i in range(1, len(tensors))]

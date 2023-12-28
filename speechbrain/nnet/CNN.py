@@ -624,7 +624,6 @@ class Conv2d(nn.Module):
         """
         if not self.skip_transpose:
             x = x.transpose(1, -1)
-
         if self.unsqueeze:
             x = x.unsqueeze(1)
 

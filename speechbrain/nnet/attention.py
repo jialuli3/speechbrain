@@ -837,3 +837,49 @@ class PositionalwiseFeedForward(nn.Module):
         x = x.permute(1, 0, 2)
 
         return x
+
+class SelfAttention(nn.Module):
+    """ This class implements self-attention module for attending fixed-dimension
+    vector. 
+    Reference: Analysis of acoustic and voice quality features for the classification of infant and mother vocalizations, 
+    Li et.al. https://www.sciencedirect.com/science/article/pii/S0167639321000868
+
+    Arguments
+    ---------
+    attn_dim : int
+        Size of the attention feature.
+    output_dim : int
+        Size of the output context vector.
+    scaling : float
+        The factor controls the sharpening degree (default: 1.0).
+
+    """
+
+    def __init__(self, enc_dim, attn_dim, hidden_dim, output_dim, scaling=1.0):
+        super(SelfAttention, self).__init__()
+
+        self.mlp_in = nn.Linear(enc_dim, hidden_dim)
+        self.mlp_att = nn.Linear(hidden_dim, attn_dim)
+        self.mlp_out = nn.Linear(attn_dim, output_dim)
+
+        self.scaling = scaling
+        
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, enc):
+        """Returns the output of the attention module.
+
+        Arguments
+        ---------
+        enc : torch.Tensor [B x L]
+            The tensor to be attended.
+        """
+        if len(enc.size())<3:
+            enc.unsqueeze_(1)
+        xw=torch.tanh(self.mlp_in(enc))
+        A=self.softmax(self.mlp_att(xw))
+        E=torch.matmul(enc.transpose(-1,-2),A)
+        out = self.mlp_out(E)
+        #print(A.size(),enc.size(),E.size())
+        #print(out.size())
+        return out
