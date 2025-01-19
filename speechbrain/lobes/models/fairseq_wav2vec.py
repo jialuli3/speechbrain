@@ -229,17 +229,14 @@ class FairseqWav2Vec2(nn.Module):
 
         return out
     
-    def aggregate_features(self, out, include_CNN_layer=True):
+    def aggregate_features(self, out):
         features = []
-        self.model.layerdrop = 0
         for i in range(len(out['layer_results'])):
             curr_feature = out['layer_results'][i][0].transpose(0,1)
             features.append(curr_feature)
         features = torch.stack(features)
-        if not include_CNN_layer:
-            features=features[1:]
         return features
-
+        
     def reset_layer(self, model):
         """Reinitializes the parameters of the network"""
         if hasattr(model, "reset_parameters"):

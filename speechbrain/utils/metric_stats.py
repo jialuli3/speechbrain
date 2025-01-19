@@ -457,6 +457,273 @@ class ConfidenceScoreStats(MetricStats):
         f.writelines("\n".join(self.summary))
         f.close()
 
+
+class RABCBinaryMetricStats(MetricStats):
+    """Tracks binary metrics, such as precision, recall, F1, EER, etc.
+    """
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.ids = []
+        self.preds = []
+        self.labels = []
+        self.summary = {}
+
+    def append(self, ids, preds, labels):
+        """Appends scores and labels to internal lists.
+
+        Does not compute metrics until time of summary, since
+        automatic thresholds (e.g., EER) need full set of scores.
+
+        Arguments
+        ---------
+        ids : list
+            The string ids for the samples
+        preds: dict
+            list of predicted output
+        labels: dict
+            list of labels
+        """
+        self.ids.extend(ids)
+        self.preds.extend(preds.detach())
+        self.labels.extend(labels.detach())
+
+    def summarize(self, field=None, eps=1e-8):
+        """Compute statistics using a full set of scores.
+
+        Full set of fields:
+         - accuracy 
+         - weighted F1 score
+         - macro F1 score
+         - kappa scores
+         - confusion matrices
+
+        Arguments
+        ---------
+        field : str
+            A key for selecting a single statistic. If not provided,
+            a dict with all statistics is returned.
+        threshold : float
+            If no threshold is provided, equal error rate is used.
+        beta : float
+            How much to weight precision vs recall in F-score. Default
+            of 1. is equal weight, while higher values weight recall
+            higher, and lower values weight precision higher.
+        eps : float
+            A small value to avoid dividing by zero.
+        """
+
+        if isinstance(self.preds, list):
+            self.preds = np.argmax(torch.stack(self.preds).cpu().numpy(),axis=1)
+            self.labels = torch.stack(self.labels).cpu().numpy()
+
+        self.summarize_helper(self.preds,self.labels)
+        
+        if field is not None:
+            return self.summary[field]
+        else:
+            return self.summary
+    
+    def summarize_helper(self, preds, labels):
+        self.summary["accuracy"]=round(accuracy_score(labels,preds),3)
+        self.summary["UAR"]=round(recall_score(labels,preds,average="macro"),3)
+        self.summary["macro_f1"]=round(f1_score(labels,preds,average="macro"),3)
+        self.summary["confusion_matrix"]=confusion_matrix(labels,preds)
+
+    def compute_confidence_interval(self, input_json):
+        if not self.summary:
+            self.summarize()
+        num_bootstraps=100
+        alpha=5
+        input_dict = load_json(input_json)
+        child_id_idx={}
+        curr_child_idx = 0
+        conditions=[]
+        for curr_id in self.ids:
+            curr_child_id = input_dict[curr_id]["child_ID"] 
+            if curr_child_id not in child_id_idx:
+                child_id_idx[curr_child_id]=curr_child_idx
+                curr_child_idx+=1
+            conditions.append(child_id_idx[curr_child_id])
+        print("confidence interval UAR")
+        print(evaluate_with_conf_int(self.preds, recall_score, labels=self.labels, conditions=conditions, 
+                       num_bootstraps=num_bootstraps, alpha=alpha))
+        print("confidence interval F1")
+        print(evaluate_with_conf_int(self.preds, f1_score, labels=self.labels, conditions=conditions, 
+                       num_bootstraps=num_bootstraps, alpha=alpha))
+
+    def write_stats(self, filestream, verbose=True):
+        """Write all relevant statistics to file.
+
+        Arguments
+        ---------
+        filestream : file-like object
+            A stream for the stats to be written to.
+        verbose : bool
+            Whether to also print the stats to stdout.
+        """
+        if not self.summary:
+            self.summarize()
+        
+        message = f"Accuracy: {self.summary['accuracy']}\n"
+        message += f"UAR: {self.summary['UAR']}\n"
+        message += f"macro f1: {self.summary['macro_f1']}\n"
+
+        try:
+            message += f"kappa_NOI: {self.summary['kappa_5']}\n"
+        except:
+            pass
+        message += f"SIL Non-Can Can LAU CRY\n"
+        message += f"{self.summary['confusion_matrix']}\n"
+
+        filestream.write(message)
+        if verbose:
+            print(message)
+
+
+class RABCMultiMetricStats(MetricStats):
+    """Tracks binary metrics, such as precision, recall, F1, EER, etc.
+    """
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.ids = []
+        self.preds_adu = []
+        self.labels_adu = []
+        self.preds_chi = []
+        self.labels_chi = []
+        self.summary = {}
+
+    def append(self, ids, preds_adu, labels_adu, preds_chi, labels_chi):
+        """Appends scores and labels to internal lists.
+
+        Does not compute metrics until time of summary, since
+        automatic thresholds (e.g., EER) need full set of scores.
+
+        Arguments
+        ---------
+        ids : list
+            The string ids for the samples
+        preds: dict
+            list of predicted output
+        labels: dict
+            list of labels
+        """
+        self.ids.extend(ids)
+        self.preds_adu.extend(preds_adu.detach())
+        self.labels_adu.extend(labels_adu.detach())
+        self.preds_chi.extend(preds_chi.detach())
+        self.labels_chi.extend(labels_chi.detach())
+
+    def summarize(self, field=None, eps=1e-8):
+        """Compute statistics using a full set of scores.
+
+        Full set of fields:
+         - accuracy 
+         - weighted F1 score
+         - macro F1 score
+         - kappa scores
+         - confusion matrices
+
+        Arguments
+        ---------
+        field : str
+            A key for selecting a single statistic. If not provided,
+            a dict with all statistics is returned.
+        threshold : float
+            If no threshold is provided, equal error rate is used.
+        beta : float
+            How much to weight precision vs recall in F-score. Default
+            of 1. is equal weight, while higher values weight recall
+            higher, and lower values weight precision higher.
+        eps : float
+            A small value to avoid dividing by zero.
+        """
+
+        if isinstance(self.preds_adu, list):
+            self.preds_adu = np.argmax(torch.stack(self.preds_adu).cpu().numpy(),axis=1)
+            self.labels_adu = torch.stack(self.labels_adu).cpu().numpy()
+            self.preds_chi = np.argmax(torch.stack(self.preds_chi).cpu().numpy(),axis=1)
+            self.labels_chi = torch.stack(self.labels_chi).cpu().numpy()
+
+        self.summarize_helper(self.preds_adu,self.labels_adu, "adu")
+        self.summarize_helper(self.preds_chi,self.labels_chi, "chi")
+        
+        if field is not None:
+            return self.summary[field]
+        else:
+            return self.summary
+    
+    def summarize_helper(self, preds, labels, post_fix):
+        self.summary["acc_{}".format(post_fix)]=round(accuracy_score(labels,preds),3)
+        self.summary["UAR_{}".format(post_fix)]=round(recall_score(labels,preds,average="macro"),3)
+        self.summary["macro_f1_{}".format(post_fix)]=round(f1_score(labels,preds,average="macro"),3)
+        self.summary["confusion_matrix_{}".format(post_fix)]=confusion_matrix(labels,preds)
+
+        # unique_labels=np.unique(labels)
+        # for l in unique_labels:
+        #     curr_ytrue=np.where(labels==l,1,0)
+        #     curr_ypred=np.where(preds==l,1,0)
+        #     self.summary["macro_f1_{}_{}".format(str(l),post_fix)]=round(f1_score(curr_ytrue,curr_ypred,average="macro"),3)
+        self.summary["macro_f1_overall_{}".format(post_fix)]=f1_score(labels,preds,average=None)
+
+
+    def write_stats(self, filestream, verbose=True):
+        """Write all relevant statistics to file.
+
+        Arguments
+        ---------
+        filestream : file-like object
+            A stream for the stats to be written to.
+        verbose : bool
+            Whether to also print the stats to stdout.
+        """
+        if not self.summary:
+            self.summarize()
+        
+        message = f"Accuracy adu: {self.summary['acc_adu']}\n"
+        message += f"macro f1 adu: {self.summary['macro_f1_adu']}\n"
+
+        message += f"Confusion matrix:\n"
+        message += f"SIL VOC LAU\n"
+        message += f"{self.summary['confusion_matrix_adu']}\n"
+        message += f"{self.summary['macro_f1_overall_adu']}\n"
+
+        message += f"Accuracy chi: {self.summary['acc_chi']}\n"
+        message += f"macro f1 chi: {self.summary['macro_f1_chi']}\n"
+
+        message += f"Confusion matrix:\n"
+        message += f"SIL VOC VERB LAU CRY\n"
+        message += f"{self.summary['confusion_matrix_chi']}\n"
+        message += f"{self.summary['macro_f1_overall_chi']}\n"
+        # message += f"SIL f1 {self.summary['macro_f1_0_chi']}\n"
+        # message += f"VOC f1 {self.summary['macro_f1_1_chi']}\n"
+        # message += f"VERB f1 {self.summary['macro_f1_2_chi']}\n"
+        # message += f"LAU f1 {self.summary['macro_f1_3_chi']}\n"
+        # message += f"CRY f1 {self.summary['macro_f1_4_chi']}\n"
+
+        filestream.write(message)
+        if verbose:
+            print(message)
+        
+    def write_out_labels(self, out_json_file):
+        out_dict={}
+        adu_dict_map={1:"vocalization",2:"laughter",0:"N"}
+        chi_dict_map={1:"vocalization",2:"verbalization",3:"laugh",4:"whine_cry",0:"N"}
+
+        for i,curr_id in enumerate(self.ids):
+            out_dict[curr_id]={
+                "ADU": adu_dict_map[self.labels_adu[i]],
+                "CHI": chi_dict_map[self.labels_chi[i]],
+                "ADU_pred": adu_dict_map[self.preds_adu[i]],
+                "CHI_pred": chi_dict_map[self.preds_chi[i]],
+            }
+        write_json(out_dict, out_json_file)        
+
 class BinaryMetricStats(MetricStats):
     """Tracks binary metrics, such as precision, recall, F1, EER, etc.
     """
